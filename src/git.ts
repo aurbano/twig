@@ -85,9 +85,9 @@ export async function detectDefaultBranch(): Promise<string> {
 
 /**
  * Ensures the base branch is up to date by fetching from origin.
- * Returns the ref to use for creating the worktree (either local branch or remote tracking branch).
+ * Returns the commit SHA to use for creating the worktree.
  * @param base - The base branch name to update
- * @returns The git ref to use when creating the worktree (e.g., "main" or "origin/main")
+ * @returns The commit SHA of the remote base branch (prevents automatic upstream tracking)
  */
 export async function ensureBaseUpToDate(base: string): Promise<string> {
 	// Verify origin remote exists
@@ -123,9 +123,14 @@ export async function ensureBaseUpToDate(base: string): Promise<string> {
 		);
 	}
 
-	// Return the remote tracking branch to avoid checking out the base branch
-	// in the current worktree (which could conflict with other worktrees)
-	return `origin/${base}`;
+	// Get the commit SHA that the remote branch points to
+	// Using SHA instead of remote branch ref prevents automatic upstream tracking
+	const { stdout: commitSha } = await execa("git", [
+		"rev-parse",
+		`origin/${base}`,
+	]);
+
+	return commitSha.trim();
 }
 
 /**

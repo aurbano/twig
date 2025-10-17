@@ -11,9 +11,6 @@ import {
 	pruneOrphanedWorktrees,
 } from "./git.js";
 
-// Setup shell completion before parsing
-setupCompletion();
-
 const program = new Command();
 program
 	.name("twig")
@@ -111,6 +108,9 @@ program
 			console.log("  twig completion --cleanup  Remove shell completion");
 		}
 	});
+
+// Setup shell completion after all commands are registered
+setupCompletion(program);
 
 program.parseAsync().catch((err) => {
 	console.error(err?.stderr || err?.message || err);

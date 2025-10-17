@@ -1,7 +1,8 @@
+import type { Command } from "commander";
 import { execaCommand } from "execa";
 import omelette from "omelette";
 
-export function setupCompletion(): void {
+export function setupCompletion(program: Command): void {
 	const complete = omelette("twig <command> [option]");
 
 	// Check for setup/cleanup flags first, before any other logic
@@ -28,45 +29,47 @@ export function setupCompletion(): void {
 		return;
 	}
 
+	// Dynamically extract commands from the Commander program
+	const commands = program.commands.map((cmd) => cmd.name());
+
+	// Build alias map dynamically
+	const commandMap: Record<string, string> = {};
+	for (const cmd of program.commands) {
+		const name = cmd.name();
+		const aliases = cmd.aliases();
+		for (const alias of aliases) {
+			commandMap[alias] = name;
+		}
+	}
+
 	// Setup completion handlers
 	complete.on("command", ({ reply }) => {
-		reply([
-			"branch",
-			"b",
-			"list",
-			"ls",
-			"delete",
-			"d",
-			"prune",
-			"p",
-			"init-devcontainer",
-			"i",
-		]);
+		reply(commands);
 	});
 
 	complete.on("option", async ({ reply }) => {
-		// Get the command from the line
-		const line = process.env.COMP_LINE || process.env.COMP_WORDS || "";
-		const words = line.split(" ");
+		// Get the command from the line - check multiple environment variables
+		const line =
+			process.env.COMP_LINE ||
+			process.env.COMP_WORDS ||
+			process.env.COMP_POINT ||
+			"";
+		const words = line.toString().trim().split(/\s+/);
 		const command = words[1] || "";
 
-		// Map aliases to full commands
-		const commandMap: Record<string, string> = {
-			b: "branch",
-			ls: "list",
-			d: "delete",
-			p: "prune",
-			i: "init-devcontainer",
-		};
+		// Map aliases to full commands (using the dynamically built map)
 		const actualCommand = commandMap[command] || command;
 
 		if (actualCommand === "branch") {
 			// For branch command, suggest git branches
 			try {
 				const { stdout } = await execaCommand(
-					"git branch --format='%(refname:short)' 2>/dev/null",
+					"git branch --format='%(refname:short)'",
 				);
-				const branches = stdout.split("\n").filter(Boolean);
+				const branches = stdout
+					.split("\n")
+					.map((b) => b.trim())
+					.filter(Boolean);
 				reply(branches);
 			} catch {
 				reply([]);
@@ -74,16 +77,14 @@ export function setupCompletion(): void {
 		} else if (actualCommand === "delete") {
 			// For delete command, suggest only branches with worktrees
 			try {
-				const { stdout } = await execaCommand(
-					"git worktree list --porcelain 2>/dev/null",
-				);
+				const { stdout } = await execaCommand("git worktree list --porcelain");
 				// Parse worktree list to get branches
 				const branches: string[] = [];
 				const lines = stdout.split("\n");
 				for (const line of lines) {
 					if (line.startsWith("branch ")) {
 						// Extract branch name from "branch refs/heads/branch-name"
-						const branch = line.replace("branch refs/heads/", "").trim();
+						const branch = line.replace(/^branch refs\/heads\//, "").trim();
 						if (branch) {
 							branches.push(branch);
 						}
