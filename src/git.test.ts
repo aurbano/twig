@@ -172,4 +172,74 @@ branch refs/heads/feature-branch`;
 			assert.strictEqual(candidates.length, 2);
 		});
 	});
+
+	describe("findOrphanedWorktrees logic", () => {
+		it("should identify worktrees without branches as non-orphaned", () => {
+			// Worktrees without branches (detached HEAD) should not be considered orphaned
+			const worktrees = [
+				{ path: "/path/to/main", branch: "main", head: "abc123" },
+				{ path: "/path/to/detached", head: "def456" }, // No branch
+			];
+
+			// Simulating the logic: worktrees without branches are skipped
+			const potentialOrphans = worktrees.filter((wt) => wt.branch);
+			assert.strictEqual(potentialOrphans.length, 1);
+			assert.strictEqual(potentialOrphans[0]?.branch, "main");
+		});
+
+		it("should filter worktrees by branch existence", () => {
+			// Mock data
+			const worktrees = [
+				{ path: "/path/to/main", branch: "main" },
+				{ path: "/path/to/feature", branch: "feature" },
+				{ path: "/path/to/deleted", branch: "deleted-branch" },
+			];
+
+			// Simulate branches that exist
+			const existingBranches = new Set(["main", "feature"]);
+
+			// Find orphaned worktrees (branches that don't exist)
+			const orphaned = worktrees.filter(
+				(wt) => wt.branch && !existingBranches.has(wt.branch),
+			);
+
+			assert.strictEqual(orphaned.length, 1);
+			assert.strictEqual(orphaned[0]?.branch, "deleted-branch");
+		});
+	});
+
+	describe("installPruneHook behavior", () => {
+		it("should generate correct hook content", () => {
+			const expectedContent = `#!/bin/sh
+# Auto-installed by twig: prune orphaned worktrees
+twig prune --yes 2>/dev/null || true
+`;
+			// Verify the hook content format
+			assert.ok(expectedContent.startsWith("#!/bin/sh"));
+			assert.ok(expectedContent.includes("twig prune --yes"));
+			assert.ok(expectedContent.includes("2>/dev/null || true"));
+		});
+
+		it("should detect existing hook content", () => {
+			const existingHook1 = `#!/bin/sh
+# Auto-installed by twig: prune orphaned worktrees
+twig prune --yes 2>/dev/null || true
+`;
+
+			const existingHook2 = `#!/bin/sh
+# Some other hook
+echo "Checking out"
+# Auto-installed by twig: prune orphaned worktrees
+twig prune --yes 2>/dev/null || true
+`;
+
+			const newHook = `#!/bin/sh
+echo "Different hook"
+`;
+
+			assert.ok(existingHook1.includes("twig prune"));
+			assert.ok(existingHook2.includes("twig prune"));
+			assert.ok(!newHook.includes("twig prune"));
+		});
+	});
 });

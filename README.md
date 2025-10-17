@@ -24,6 +24,10 @@ twig ls  # short alias
 twig delete <branch-or-path>
 twig d <branch-or-path>  # short alias
 
+# Remove orphaned worktrees (branches that no longer exist)
+twig prune
+twig p  # short alias
+
 # Initialize dev container configuration
 twig init-devcontainer [options]
 twig i [options]  # short alias
@@ -39,6 +43,9 @@ twig i [options]  # short alias
 
 **`delete`**
 - `--keep-branch` - Keep the git branch after removing worktree
+- `-y, --yes` - Skip confirmation prompts
+
+**`prune`**
 - `-y, --yes` - Skip confirmation prompts
 
 **`init-devcontainer`**
@@ -67,6 +74,10 @@ twig branch hotfix/urgent-bug
 
 # Clean up when done
 twig delete feature/new-api
+
+# Or, if you deleted branches directly with git, clean up orphaned worktrees
+# git branch -D feature/old-feature
+twig prune
 ```
 
 ### With Dev Containers
@@ -98,6 +109,16 @@ twig branch feature/ui
 # - Working directory
 # - Git branch
 # - Optional dev container
+```
+
+### Automatic Cleanup
+
+When you use `twig branch` for the first time, it automatically installs a git `post-checkout` hook that prunes orphaned worktrees. This means if you delete a branch directly (e.g., `git branch -D feature/old`), the corresponding worktree will be automatically removed the next time you checkout a branch.
+
+You can also manually trigger cleanup anytime:
+
+```bash
+twig prune
 ```
 
 ## Development

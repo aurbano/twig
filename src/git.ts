@@ -342,3 +342,127 @@ export async function deleteWorktree(
 	}
 	console.log(`Removed worktree${opts.keepBranch ? "" : " and branch"}.`);
 }
+
+/**
+ * Checks if a branch exists locally.
+ * @param branch - The branch name to check
+ * @returns True if the branch exists, false otherwise
+ */
+export async function branchExists(branch: string): Promise<boolean> {
+	const result = await execa(
+		"git",
+		["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+		{ reject: false },
+	);
+	return result.exitCode === 0;
+}
+
+/**
+ * Finds worktrees whose branches no longer exist (orphaned worktrees).
+ * @returns Array of orphaned worktree information objects
+ */
+export async function findOrphanedWorktrees(): Promise<
+	Array<{ path: string; branch: string }>
+> {
+	const worktrees = await parseWorktrees();
+	const orphaned: Array<{ path: string; branch: string }> = [];
+
+	for (const wt of worktrees) {
+		// Skip worktrees without a branch (detached HEAD, or main worktree)
+		if (!wt.branch) continue;
+
+		// Check if the branch still exists
+		if (!(await branchExists(wt.branch))) {
+			orphaned.push({ path: wt.path, branch: wt.branch });
+		}
+	}
+
+	return orphaned;
+}
+
+/**
+ * Prunes orphaned worktrees (worktrees whose branches no longer exist).
+ * @param opts - Options for pruning
+ * @returns Number of worktrees pruned
+ */
+export async function pruneOrphanedWorktrees(opts: {
+	yes?: boolean;
+}): Promise<number> {
+	const orphaned = await findOrphanedWorktrees();
+
+	if (orphaned.length === 0) {
+		console.log("No orphaned worktrees found.");
+		return 0;
+	}
+
+	console.log(`Found ${orphaned.length} orphaned worktree(s):`);
+	for (const wt of orphaned) {
+		console.log(`  ${wt.path} (branch: ${wt.branch})`);
+	}
+
+	const proceed =
+		opts.yes ||
+		(await confirm({
+			message: `Remove ${orphaned.length} orphaned worktree(s)?`,
+			default: true,
+		}));
+
+	if (!proceed) {
+		throw new Error("Aborted.");
+	}
+
+	for (const wt of orphaned) {
+		try {
+			await execa("git", ["worktree", "remove", "--force", wt.path]);
+			console.log(`Removed: ${wt.path}`);
+		} catch (err) {
+			console.error(
+				`Failed to remove ${wt.path}: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+	}
+
+	return orphaned.length;
+}
+
+/**
+ * Installs the post-checkout git hook to automatically prune orphaned worktrees.
+ * The hook will be created if it doesn't exist, or updated if it doesn't contain the prune command.
+ * @returns True if the hook was installed/updated, false if it was already present
+ */
+export async function installPruneHook(): Promise<boolean> {
+	const root = await repoRoot();
+	const gitDir = (await execa("git", ["rev-parse", "--git-dir"])).stdout.trim();
+	const hooksDir = path.resolve(root, gitDir, "hooks");
+	const hookPath = path.join(hooksDir, "post-checkout");
+
+	// Ensure hooks directory exists
+	await fs.mkdir(hooksDir, { recursive: true });
+
+	const hookContent = `#!/bin/sh
+# Auto-installed by twig: prune orphaned worktrees
+twig prune --yes 2>/dev/null || true
+`;
+
+	try {
+		const existingContent = await fs.readFile(hookPath, "utf8");
+
+		// Check if our hook is already present
+		if (existingContent.includes("twig prune")) {
+			return false; // Already installed
+		}
+
+		// Append to existing hook
+		await fs.appendFile(hookPath, `\n${hookContent}`);
+		console.log("Updated existing post-checkout hook to include twig prune.");
+	} catch {
+		// File doesn't exist, create it
+		await fs.writeFile(hookPath, hookContent);
+		await fs.chmod(hookPath, 0o755); // Make executable
+		console.log(
+			"Installed post-checkout hook to automatically prune orphaned worktrees.",
+		);
+	}
+
+	return true;
+}

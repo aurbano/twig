@@ -2,7 +2,13 @@
 import { Command } from "commander";
 import { devcontainerUp, initDevcontainer } from "./devcontainer.js";
 import { openInEditor } from "./editor.js";
-import { deleteWorktree, listWorktrees, openWorktree } from "./git.js";
+import {
+	deleteWorktree,
+	installPruneHook,
+	listWorktrees,
+	openWorktree,
+	pruneOrphanedWorktrees,
+} from "./git.js";
 
 const program = new Command();
 program
@@ -25,6 +31,8 @@ program
 	.option("--in-container", "bring up devcontainer then open")
 	.option("-y, --yes", "assume yes to prompts")
 	.action(async (target, opts) => {
+		// Install the prune hook if not already present
+		await installPruneHook();
 		const dir = await openWorktree(target, opts);
 		if (opts.inContainer) await devcontainerUp(dir);
 		await openInEditor(dir);
@@ -45,6 +53,15 @@ program
 	.option("-y, --yes", "assume yes to prompts")
 	.action(async (target, opts) => {
 		await deleteWorktree(target, opts);
+	});
+
+program
+	.command("prune")
+	.alias("p")
+	.description("remove worktrees for branches that no longer exist")
+	.option("-y, --yes", "assume yes to prompts")
+	.action(async (opts) => {
+		await pruneOrphanedWorktrees(opts);
 	});
 
 program
