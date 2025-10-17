@@ -1,6 +1,6 @@
 # 🌿 Twig
 
-Lightweight CLI to manage multiple Git worktrees with optional Dev Container integration. Perfect for concurrent feature development with LLM coding assistants.
+Lightweight CLI to manage multiple Git worktrees with optional [VSCode Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) integration. Perfect for concurrent feature development with LLM coding assistants.
 
 ## Why?
 
