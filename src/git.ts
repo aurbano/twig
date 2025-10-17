@@ -15,10 +15,28 @@ export async function repoRoot(): Promise<string> {
 
 /**
  * Gets the name of the current git repository (basename of root directory).
+ * When called from a worktree, returns the main repository name, not the worktree name.
  * @returns Repository name
  */
 export async function repoName(): Promise<string> {
-	return path.basename(await repoRoot());
+	// Get the common git directory (points to the main .git directory even from worktrees)
+	const { stdout: gitCommonDir } = await execa("git", [
+		"rev-parse",
+		"--git-common-dir",
+	]);
+	const commonDir = gitCommonDir.trim();
+
+	// If it's a main repository (not a worktree), commonDir will be ".git"
+	// If it's a worktree, commonDir will be an absolute path to the main .git directory
+	if (commonDir === ".git") {
+		// We're in the main repository
+		return path.basename(await repoRoot());
+	}
+
+	// We're in a worktree, get the main repository name from the common git dir
+	// The common dir is like /path/to/main-repo/.git, so go up one level
+	const mainRepoPath = path.dirname(commonDir);
+	return path.basename(mainRepoPath);
 }
 
 /**
@@ -66,42 +84,12 @@ export async function detectDefaultBranch(): Promise<string> {
 }
 
 /**
- * Ensures the base branch is up to date by fetching and fast-forward merging.
- * Checks for clean working directory and repo state before making changes.
+ * Ensures the base branch is up to date by fetching from origin.
+ * Returns the ref to use for creating the worktree (either local branch or remote tracking branch).
  * @param base - The base branch name to update
+ * @returns The git ref to use when creating the worktree (e.g., "main" or "origin/main")
  */
-export async function ensureBaseUpToDate(base: string) {
-	// Check for clean working directory
-	const statusResult = await execa("git", ["status", "--porcelain"], {
-		reject: false,
-	});
-	if (statusResult.stdout.trim().length > 0) {
-		throw new Error(
-			"Working directory has uncommitted changes. Please commit or stash them before creating a worktree.",
-		);
-	}
-
-	// Check if we're in the middle of a rebase/merge/cherry-pick
-	const gitDir = (await execa("git", ["rev-parse", "--git-dir"])).stdout.trim();
-	try {
-		await fs.access(`${gitDir}/rebase-merge`);
-		throw new Error(
-			"Repository is in the middle of a rebase. Please complete or abort it first.",
-		);
-	} catch {}
-	try {
-		await fs.access(`${gitDir}/MERGE_HEAD`);
-		throw new Error(
-			"Repository is in the middle of a merge. Please complete or abort it first.",
-		);
-	} catch {}
-	try {
-		await fs.access(`${gitDir}/CHERRY_PICK_HEAD`);
-		throw new Error(
-			"Repository is in the middle of a cherry-pick. Please complete or abort it first.",
-		);
-	} catch {}
-
+export async function ensureBaseUpToDate(base: string): Promise<string> {
 	// Verify origin remote exists
 	const remotes = await execa("git", ["remote"], { reject: false });
 	if (!remotes.stdout.includes("origin")) {
@@ -119,44 +107,25 @@ export async function ensureBaseUpToDate(base: string) {
 		);
 	}
 
-	const haveLocal =
+	// Check if remote branch exists
+	const remoteExists =
 		(
 			await execa(
 				"git",
-				["show-ref", "--verify", "--quiet", `refs/heads/${base}`],
+				["show-ref", "--verify", "--quiet", `refs/remotes/origin/${base}`],
 				{ reject: false },
 			)
 		).exitCode === 0;
 
-	if (haveLocal) {
-		await execa("git", ["checkout", base]);
-		const pullResult = await execa(
-			"git",
-			["pull", "--ff-only", "origin", base],
-			{ reject: false },
+	if (!remoteExists) {
+		throw new Error(
+			`Branch '${base}' does not exist on origin. Please specify a valid base branch.`,
 		);
-		if (pullResult.exitCode !== 0) {
-			throw new Error(
-				`Failed to fast-forward ${base}. You may need to manually resolve conflicts.`,
-			);
-		}
-	} else {
-		// Check if remote branch exists
-		const remoteExists =
-			(
-				await execa(
-					"git",
-					["show-ref", "--verify", "--quiet", `refs/remotes/origin/${base}`],
-					{ reject: false },
-				)
-			).exitCode === 0;
-		if (!remoteExists) {
-			throw new Error(
-				`Branch '${base}' does not exist locally or on origin. Please specify a valid base branch.`,
-			);
-		}
-		await execa("git", ["checkout", "-b", base, `origin/${base}`]);
 	}
+
+	// Return the remote tracking branch to avoid checking out the base branch
+	// in the current worktree (which could conflict with other worktrees)
+	return `origin/${base}`;
 }
 
 /**
@@ -231,7 +200,7 @@ export async function createWorktree(
 	validateBranchName(branch);
 
 	const base = opts.base ?? (await detectDefaultBranch());
-	await ensureBaseUpToDate(base);
+	const baseRef = await ensureBaseUpToDate(base);
 
 	// Capture the base branch's working directory path for copying untracked files
 	const baseDir = await repoRoot();
@@ -257,7 +226,7 @@ export async function createWorktree(
 		);
 	}
 
-	await execa("git", ["worktree", "add", "-b", branch, dir, base]);
+	await execa("git", ["worktree", "add", "-b", branch, dir, baseRef]);
 	console.log(`Created worktree at ${dir}`);
 
 	await copyUntrackedFiles(baseDir, dir);

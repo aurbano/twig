@@ -7,8 +7,14 @@ import { execa } from "execa";
  */
 export async function openInEditor(dir: string) {
 	const tryRun = async (cmd: string) =>
-		(await execa(cmd, ["."], { cwd: dir, reject: false, stdio: "ignore" }))
-			.exitCode === 0;
+		(
+			await execa(cmd, ["."], {
+				cwd: dir,
+				reject: false,
+				stdio: "ignore",
+				detached: true,
+			})
+		).exitCode === 0;
 	if (await tryRun("cursor")) {
 		console.log(`Opened in Cursor: ${dir}`);
 		return;
