@@ -4,6 +4,30 @@ import omelette from "omelette";
 export function setupCompletion(): void {
 	const complete = omelette("twig <command> [option]");
 
+	// Check for setup/cleanup flags first, before any other logic
+	if (process.argv.includes("--setup-completion")) {
+		// Print message before calling setupShellInitFile (which exits the process)
+		process.stdout.write("\n✓ Shell completion installed successfully!\n\n");
+		process.stdout.write("To activate it in your current terminal, run:\n\n");
+		if (process.env.SHELL?.includes("zsh")) {
+			process.stdout.write("  source ~/.zshrc\n\n");
+		} else {
+			process.stdout.write("  source ~/.bashrc\n\n");
+		}
+		process.stdout.write("Or simply restart your terminal.\n\n");
+		// setupShellInitFile() will exit the process
+		complete.setupShellInitFile();
+		return;
+	}
+
+	if (process.argv.includes("--cleanup-completion")) {
+		// Print message before calling cleanupShellInitFile (which may exit)
+		process.stdout.write("\n✓ Shell completion removed!\n\n");
+		process.stdout.write("Restart your terminal to complete the removal.\n\n");
+		complete.cleanupShellInitFile();
+		return;
+	}
+
 	// Setup completion handlers
 	complete.on("command", ({ reply }) => {
 		reply([
@@ -74,27 +98,6 @@ export function setupCompletion(): void {
 		}
 	});
 
-	// Initialize completion
+	// Initialize completion for normal operation
 	complete.init();
-
-	// Handle setup/install command
-	if (process.argv.includes("--setup-completion")) {
-		complete.setupShellInitFile();
-		console.log("\n✓ Shell completion installed successfully!\n");
-		console.log("To activate it in your current terminal, run:\n");
-		if (process.env.SHELL?.includes("zsh")) {
-			console.log("  source ~/.zshrc\n");
-		} else {
-			console.log("  source ~/.bashrc\n");
-		}
-		console.log("Or simply restart your terminal.\n");
-		process.exit(0);
-	}
-
-	// Handle cleanup command
-	if (process.argv.includes("--cleanup-completion")) {
-		complete.cleanupShellInitFile();
-		console.log("\n✓ Shell completion removed! Restart your terminal.\n");
-		process.exit(0);
-	}
 }
