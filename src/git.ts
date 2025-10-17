@@ -171,6 +171,54 @@ export async function defaultDir(branch: string): Promise<string> {
 }
 
 /**
+ * Copies untracked files from source directory to destination directory.
+ * Skips git-tracked files since they're already checked out in the worktree.
+ * @param sourceDir - Source directory (base branch's worktree)
+ * @param destDir - Destination directory (new worktree)
+ */
+async function copyUntrackedFiles(
+	sourceDir: string,
+	destDir: string,
+): Promise<void> {
+	// Get list of tracked files relative to the repo root
+	const { stdout } = await execa("git", ["ls-files"], { cwd: sourceDir });
+	const trackedFiles = new Set(
+		stdout
+			.split("\n")
+			.map((f) => f.trim())
+			.filter((f) => f.length > 0),
+	);
+
+	// Copy files with filtering
+	try {
+		await fs.cp(sourceDir, destDir, {
+			recursive: true,
+			filter: (src, _dest) => {
+				const relativePath = path.relative(sourceDir, src);
+
+				// Always exclude .git directory
+				if (relativePath === ".git" || relativePath.startsWith(".git/")) {
+					return false;
+				}
+
+				// Skip tracked files (they're already checked out)
+				if (trackedFiles.has(relativePath)) {
+					return false;
+				}
+
+				return true;
+			},
+		});
+		console.log("Copied untracked files from base branch");
+	} catch (err) {
+		// Non-fatal: log but don't fail the worktree creation
+		console.warn(
+			`Warning: Failed to copy some untracked files: ${err instanceof Error ? err.message : String(err)}`,
+		);
+	}
+}
+
+/**
  * Creates a new git worktree with a new branch.
  * @param branch - Name of the new branch to create
  * @param opts - Options for worktree creation
@@ -184,6 +232,10 @@ export async function createWorktree(
 
 	const base = opts.base ?? (await detectDefaultBranch());
 	await ensureBaseUpToDate(base);
+
+	// Capture the base branch's working directory path for copying untracked files
+	const baseDir = await repoRoot();
+
 	const dir = opts.dir ?? (await defaultDir(branch));
 
 	if (
@@ -207,6 +259,9 @@ export async function createWorktree(
 
 	await execa("git", ["worktree", "add", "-b", branch, dir, base]);
 	console.log(`Created worktree at ${dir}`);
+
+	await copyUntrackedFiles(baseDir, dir);
+
 	return dir;
 }
 
