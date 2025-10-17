@@ -2,6 +2,13 @@
 
 Lightweight CLI to manage multiple Git worktrees with optional Dev Container integration. Perfect for concurrent feature development with LLM coding assistants.
 
+## Why?
+
+`twig` makes it effortless to work on multiple branches of the same repo at the same time in isolated folders that are mapped to git branches.
+
+This can be useful for traditional development, where you might need to do a quick bug fix without leaving the branch you were working on.
+And it can be even more useful for LLM-assisted coding, allowing you to have multiple parallel instances working independently.
+
 ## Installation
 
 ```bash

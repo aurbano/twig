@@ -268,17 +268,12 @@ export async function parseWorktrees(): Promise<
 }
 
 /**
- * Lists all git worktrees in a formatted table.
+ * Lists all git worktrees as simple branch names.
  */
 export async function listWorktrees() {
 	const items = await parseWorktrees();
-	const pad = (s: string, n: number) => s.padEnd(n, " ");
-	console.log(`${pad("PATH", 50)}  ${pad("BRANCH", 20)}  HEAD`);
-	console.log(`${"-".repeat(50)}  ${"-".repeat(20)}  ${"-".repeat(7)}`);
 	for (const it of items) {
-		console.log(
-			`${pad(it.path, 50)}  ${pad(it.branch ?? "<detached>", 20)}  ${it.head ?? ""}`,
-		);
+		console.log(it.branch ?? "<detached>");
 	}
 }
 
