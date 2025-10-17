@@ -205,14 +205,6 @@ export async function createWorktree(
 		);
 	}
 
-	const proceed =
-		opts.yes ||
-		(await confirm({
-			message: `Create worktree ${dir} from ${base} as ${branch}?`,
-			default: false,
-		}));
-	if (!proceed) throw new Error("Aborted.");
-
 	await execa("git", ["worktree", "add", "-b", branch, dir, base]);
 	console.log(`Created worktree at ${dir}`);
 	return dir;
