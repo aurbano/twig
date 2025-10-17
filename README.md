@@ -113,7 +113,7 @@ twig branch feature/ui
 # Clone and install
 git clone https://github.com/aurbano/twig.git
 cd twig
-npm install
+npm install  # This also sets up git hooks via husky
 
 # Build
 npm run build
@@ -127,6 +127,8 @@ npm run lint
 # Type check
 npm run typecheck
 ```
+
+**Note:** A pre-commit hook is automatically installed that runs `lint` and `typecheck` before each commit.
 
 ### Running Locally
 
