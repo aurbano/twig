@@ -1,0 +1,53 @@
+{
+	"name": "@aurbano/twig",
+	"version": "0.0.1",
+	"description": "Lightweight CLI to manage multiple Git worktrees and isolated dev containers for LLM-friendly concurrent feature development.",
+	"keywords": [
+		"git",
+		"worktree",
+		"llm",
+		"assistant",
+		"container",
+		"devcontainer"
+	],
+	"homepage": "https://github.com/aurbano/twig#readme",
+	"bugs": {
+		"url": "https://github.com/aurbano/twig/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/aurbano/twig.git"
+	},
+	"license": "MIT",
+	"author": "Alejandro U. Alvarez",
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "./dist/index.d.ts",
+	"bin": {
+		"twig": "dist/index.js"
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "tsc",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"test": "node --test --experimental-test-coverage dist/**/*.test.js",
+		"pretest": "npm run build",
+		"prepublishOnly": "npm run build"
+	},
+	"dependencies": {
+		"@inquirer/prompts": "^7.9.0",
+		"chalk": "^5.6.2",
+		"commander": "^14.0.1",
+		"execa": "^9.6.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.2.6",
+		"@types/node": "^24.8.1",
+		"typescript": "^5.9.3"
+	}
+}
