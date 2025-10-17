@@ -13,6 +13,9 @@ And it can be even more useful for LLM-assisted coding, allowing you to have mul
 
 ```bash
 npm install -g @aurbano/twig
+
+# Optional: Enable tab completion
+twig completion --setup
 ```
 
 ## Usage
@@ -38,6 +41,9 @@ twig p  # short alias
 # Initialize dev container configuration
 twig init-devcontainer [options]
 twig i [options]  # short alias
+
+# Enable shell completion (bash/zsh)
+twig completion --setup
 ```
 
 ### Options
@@ -61,6 +67,36 @@ twig i [options]  # short alias
 - `--ports <csv>` - Comma-separated ports to forward (e.g., `3000,8080`)
 - `--postcreate <cmd>` - Command to run after container creation
 - `--mount-node-modules` - Add node_modules volume mount
+
+**`completion`**
+- `--setup` - Install shell completion (bash/zsh)
+- `--cleanup` - Remove shell completion
+
+## Shell Completion
+
+Tab completion makes using `twig` much faster by auto-completing commands and git branches.
+
+### Installation
+
+```bash
+# Install shell completion (works for bash and zsh)
+twig completion --setup
+
+# Then restart your terminal or source your shell config:
+source ~/.bashrc  # for bash
+source ~/.zshrc   # for zsh
+```
+
+To remove completion:
+```bash
+twig completion --cleanup
+```
+
+### What Gets Completed
+
+- **Commands**: `branch`, `list`, `delete`, `prune`, `init-devcontainer` (and all their aliases: `b`, `ls`, `d`, `p`, `i`)
+- **Git branches**: When using `twig branch <TAB>`, all your local git branches will be suggested
+- **Worktree branches**: When using `twig delete <TAB>`, only branches that have active worktrees will be suggested
 
 ## Examples
 

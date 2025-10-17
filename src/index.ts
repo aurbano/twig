@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { setupCompletion } from "./completion.js";
 import { devcontainerUp, initDevcontainer } from "./devcontainer.js";
 import { openInEditor } from "./editor.js";
 import {
@@ -10,11 +11,14 @@ import {
 	pruneOrphanedWorktrees,
 } from "./git.js";
 
+// Setup shell completion before parsing
+setupCompletion();
+
 const program = new Command();
 program
 	.name("twig")
 	.description("Git worktree manager with optional Dev Container integration")
-	.version("0.1.0");
+	.version("1.0.0");
 
 program
 	.command("branch")
@@ -78,6 +82,34 @@ program
 	.option("--mount-node-modules", "add node_modules named volume mount")
 	.action(async (opts) => {
 		await initDevcontainer(opts);
+	});
+
+// Add completion command
+program
+	.command("completion")
+	.description("setup or remove shell completion")
+	.option("--setup", "install shell completion")
+	.option("--cleanup", "remove shell completion")
+	.action(async (opts) => {
+		const { spawnSync } = await import("node:child_process");
+		const nodeExec = process.argv[0] || process.execPath;
+		const scriptPath = process.argv[1] || "";
+
+		if (opts.setup) {
+			// Re-run with setup flag
+			spawnSync(nodeExec, [scriptPath, "--setup-completion"], {
+				stdio: "inherit",
+			});
+		} else if (opts.cleanup) {
+			// Re-run with cleanup flag
+			spawnSync(nodeExec, [scriptPath, "--cleanup-completion"], {
+				stdio: "inherit",
+			});
+		} else {
+			console.log("Usage:");
+			console.log("  twig completion --setup    Install shell completion");
+			console.log("  twig completion --cleanup  Remove shell completion");
+		}
 	});
 
 program.parseAsync().catch((err) => {
