@@ -98,6 +98,105 @@ twig completion --cleanup
 - **Git branches**: When using `twig branch <TAB>`, all your local git branches will be suggested
 - **Worktree branches**: When using `twig delete <TAB>`, only branches that have active worktrees will be suggested
 
+## Configuration
+
+`twig` allows you to configure which editor to open when switching to a worktree. While the shell has an `$EDITOR` variable, most developers set it to `vim` for terminal use, even if they prefer Cursor, VS Code, or Claude for their main development.
+
+### Config File Locations
+
+`twig` looks for configuration in the following order (first match wins):
+
+1. **Per-project**: `.twig` file in the repository root
+2. **Global**:
+   - `~/.config/twig/config.json` (Linux/macOS)
+   - `%APPDATA%\twig\config.json` (Windows)
+3. **Smart defaults**: Auto-detected based on project markers (see below)
+4. **Fallback**: Tries `cursor`, then `code` commands
+
+### Config Format
+
+You can use either a simple string format or a structured format for more control:
+
+**Simple format** (most common):
+```json
+{
+  "editor": "cursor"
+}
+```
+
+**Structured format** (with custom arguments):
+```json
+{
+  "editor": {
+    "command": "cursor",
+    "args": ["--wait", "."]
+  }
+}
+```
+
+### Supported Editor Shortcuts
+
+Common editor shortcuts are recognized and will use friendly names in output:
+
+- `cursor` - Cursor AI editor
+- `code` - Visual Studio Code
+- `claude` - Claude.ai editor
+- `vim` - Vim
+- `nvim` - Neovim
+- `emacs` - Emacs
+- `nano` - Nano
+- Custom commands and full paths are also supported
+
+### Smart Defaults
+
+If no configuration file is found, `twig` will try to detect your preferred editor based on project markers:
+
+- `.cursor/` folder → Opens with Cursor
+- `.vscode/` folder → Opens with VS Code
+- `.claude/` folder → Opens with Claude
+
+This means projects will automatically open in the right editor without any configuration in most cases.
+
+### Configuration Examples
+
+**Skip editor launch entirely** (useful if you prefer to open editors manually):
+```json
+{
+  "editor": "none"
+}
+```
+
+**Use Vim** (great for quick edits):
+```json
+{
+  "editor": "vim"
+}
+```
+
+**Use custom editor with specific arguments**:
+```json
+{
+  "editor": {
+    "command": "code",
+    "args": ["--new-window", "--goto", "."]
+  }
+}
+```
+
+**Use custom editor path**:
+```json
+{
+  "editor": "/usr/local/bin/my-editor"
+}
+```
+
+**Per-project override**: Create a `.twig` file in your repo:
+```bash
+echo '{"editor": "vim"}' > .twig
+```
+
+You can add `.twig` to `.gitignore` for personal preferences, or commit it for team-wide defaults.
+
 ## Examples
 
 ### Basic Workflow
