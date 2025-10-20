@@ -1,6 +1,6 @@
-import { commandExists, spawnDetached } from "./commands/process-operations.js";
 import type { EditorConfig } from "./config.js";
 import { getConfigPath, loadEditorConfig } from "./config.js";
+import { commandExists, spawnDetached } from "./system/process-operations.js";
 
 /**
  * Get a user-friendly name for common editors

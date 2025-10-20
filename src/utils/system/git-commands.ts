@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { execa, execaCommand } from "execa";
 
 /**
@@ -6,6 +7,20 @@ import { execa, execaCommand } from "execa";
 export async function execGit(args: string[]): Promise<string> {
 	const { stdout } = await execa("git", args);
 	return stdout.trim();
+}
+
+/**
+ * Execute a git command synchronously (for use in completion handlers)
+ */
+export function execGitSync(args: string[]): string {
+	try {
+		return execSync(`git ${args.join(" ")}`, {
+			encoding: "utf8",
+			stdio: ["pipe", "pipe", "ignore"],
+		}).trim();
+	} catch {
+		return "";
+	}
 }
 
 /**

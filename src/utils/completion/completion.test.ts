@@ -4,12 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { Command } from "commander";
-import {
-	buildAliasMap,
-	extractCommandNames,
-	isCompletionInstalled,
-	parseBranchesFromWorktreeOutput,
-} from "./completion.js";
+import { buildAliasMap } from "./buildAliasMap.js";
+import { extractCommandNames } from "./extractCommandNames.js";
+import { isCompletionInstalled } from "./isCompletionInstalled.js";
 
 describe("completion module", () => {
 	describe("extractCommandNames", () => {
@@ -70,78 +67,36 @@ describe("completion module", () => {
 		});
 	});
 
-	describe("parseBranchesFromWorktreeOutput", () => {
-		it("should parse branch names from worktree output", () => {
-			const stdout = `worktree /path/to/main
-HEAD abc123
-branch refs/heads/main
-
-worktree /path/to/feature
-HEAD def456
-branch refs/heads/feature-branch`;
-
-			const branches = parseBranchesFromWorktreeOutput(stdout);
-
-			assert.strictEqual(branches.length, 2);
-			assert.strictEqual(branches[0], "main");
-			assert.strictEqual(branches[1], "feature-branch");
-		});
-
-		it("should handle empty worktree output", () => {
-			const stdout = "";
-			const branches = parseBranchesFromWorktreeOutput(stdout);
-
-			assert.strictEqual(branches.length, 0);
-		});
-
-		it("should handle worktree output with no branches (detached HEAD)", () => {
-			const stdout = `worktree /path/to/detached
-HEAD abc123`;
-
-			const branches = parseBranchesFromWorktreeOutput(stdout);
-
-			assert.strictEqual(branches.length, 0);
-		});
-
-		it("should strip refs/heads/ prefix from branch names", () => {
-			const stdout = `worktree /path/to/repo
-HEAD abc123
-branch refs/heads/feature/test-branch`;
-
-			const branches = parseBranchesFromWorktreeOutput(stdout);
-
-			assert.strictEqual(branches.length, 1);
-			assert.strictEqual(branches[0], "feature/test-branch");
-		});
-	});
-
 	describe("delete command completion", () => {
 		it("should return branches from worktree list that match what twig ls shows", async () => {
-			// Import the actual git functions to get real data
-			const { parseWorktrees } = await import("./git.js");
-			const { execGitCommand } = await import("./commands/git-commands.js");
+			// Both `twig ls` and completion now use the same underlying function!
+			const { parseWorktrees, parseWorktreesSync } = await import(
+				"../git/parseWorktrees.js"
+			);
 
-			// Get branches the same way `twig ls` does
-			const worktrees = await parseWorktrees();
-			const expectedBranches = worktrees
+			// Get branches the same way `twig ls` does (async)
+			const worktreesAsync = await parseWorktrees();
+			const asyncBranches = worktreesAsync
 				.filter((wt) => wt.branch !== undefined)
 				.map((wt) => wt.branch as string);
 
-			// Get branches the same way completion does for delete command
-			const stdout = await execGitCommand("git worktree list --porcelain");
-			const completionBranches = parseBranchesFromWorktreeOutput(stdout);
+			// Get branches the same way completion does for delete command (sync)
+			const worktreesSync = parseWorktreesSync();
+			const syncBranches = worktreesSync
+				.filter((wt) => wt.branch !== undefined)
+				.map((wt) => wt.branch as string);
 
 			// These should match!
 			assert.strictEqual(
-				completionBranches.length,
-				expectedBranches.length,
-				`Completion returned ${completionBranches.length} branches but twig ls shows ${expectedBranches.length}`,
+				syncBranches.length,
+				asyncBranches.length,
+				`Sync version returned ${syncBranches.length} branches but async version shows ${asyncBranches.length}`,
 			);
 
-			for (const branch of expectedBranches) {
+			for (const branch of asyncBranches) {
 				assert.ok(
-					completionBranches.includes(branch),
-					`Branch "${branch}" from twig ls not found in completion suggestions`,
+					syncBranches.includes(branch),
+					`Branch "${branch}" from async version not found in sync version`,
 				);
 			}
 		});

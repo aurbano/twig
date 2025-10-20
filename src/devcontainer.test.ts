@@ -5,15 +5,15 @@ import {
 	formatPackageList,
 	formatPorts,
 	formatPostCreateCommand,
-	generateDevcontainerJson,
-	generateDockerfileContent,
-	generateDockerignoreContent,
-} from "./devcontainer.js";
+} from "./utils/devcontainer/formatters.js";
+import { generateDevcontainerJson } from "./utils/devcontainer/generateDevcontainerJson.js";
+import { generateDockerfileContent } from "./utils/devcontainer/generateDockerfile.js";
+import { generateDockerignoreContent } from "./utils/devcontainer/generateDockerignore.js";
 import {
 	validateDockerImage,
 	validatePackageNames,
 	validatePortList,
-} from "./validation.js";
+} from "./utils/validation.js";
 
 describe("devcontainer module", () => {
 	describe("formatPackageList", () => {

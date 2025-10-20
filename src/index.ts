@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { branch } from "./branch.js";
 import { setupCompletion } from "./completion.js";
-import { devcontainerUp, initDevcontainer } from "./devcontainer.js";
-import { openInEditor } from "./editor.js";
-import {
-	deleteWorktree,
-	installPruneHook,
-	listWorktrees,
-	openWorktree,
-	pruneOrphanedWorktrees,
-} from "./git.js";
+import { deleteWorktree } from "./delete.js";
+import { initDevcontainer } from "./init-devcontainer.js";
+import { list } from "./list.js";
+import { prune } from "./prune.js";
+import { devcontainerUp } from "./utils/devcontainer/devcontainerUp.js";
+import { openInEditor } from "./utils/editor.js";
 import { extractErrorMessage } from "./utils/extractErrorMessage.js";
+import { installPruneHook } from "./utils/git/installPruneHook.js";
 
 const program = new Command();
 program
@@ -35,7 +34,7 @@ program
 	.action(async (target, opts) => {
 		// Install the prune hook if not already present
 		await installPruneHook();
-		const dir = await openWorktree(target, opts);
+		const dir = await branch(target, opts);
 		if (opts.inContainer) await devcontainerUp(dir);
 		await openInEditor(dir);
 	});
@@ -44,7 +43,7 @@ program
 	.command("list")
 	.alias("ls")
 	.action(async () => {
-		await listWorktrees();
+		await list();
 	});
 
 program
@@ -63,7 +62,7 @@ program
 	.description("remove worktrees for branches that no longer exist")
 	.option("-y, --yes", "assume yes to prompts")
 	.action(async (opts) => {
-		await pruneOrphanedWorktrees(opts);
+		await prune(opts);
 	});
 
 program

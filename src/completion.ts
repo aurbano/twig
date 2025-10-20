@@ -1,70 +1,10 @@
-import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import omelette from "omelette";
-import { execGitCommand } from "./commands/git-commands.js";
-
-/**
- * Extract command names from a Commander program
- */
-export function extractCommandNames(program: Command): string[] {
-	return program.commands.map((cmd) => cmd.name());
-}
-
-/**
- * Build a map of aliases to their full command names
- */
-export function buildAliasMap(program: Command): Record<string, string> {
-	const commandMap: Record<string, string> = {};
-	for (const cmd of program.commands) {
-		const name = cmd.name();
-		const aliases = cmd.aliases();
-		for (const alias of aliases) {
-			commandMap[alias] = name;
-		}
-	}
-	return commandMap;
-}
-
-/**
- * Parse branch names from git worktree list porcelain output
- */
-export function parseBranchesFromWorktreeOutput(stdout: string): string[] {
-	const branches: string[] = [];
-	const lines = stdout.split("\n");
-	for (const line of lines) {
-		if (line.startsWith("branch ")) {
-			// Extract branch name from "branch refs/heads/branch-name"
-			const branch = line.replace(/^branch refs\/heads\//, "").trim();
-			if (branch) {
-				branches.push(branch);
-			}
-		}
-	}
-	return branches;
-}
-
-/**
- * Check if completion is already installed in the shell init file
- * Uses omelette's own methods to determine the init file path
- */
-export function isCompletionInstalled(programName = "twig"): boolean {
-	try {
-		// Create a temporary omelette instance to access its methods
-		// biome-ignore lint/suspicious/noExplicitAny: omelette doesn't have TypeScript definitions for these internal methods
-		const tempComplete = omelette(`${programName} <command>`) as any;
-
-		// Use omelette's method to get the init file path
-		const initFile = tempComplete.getDefaultShellInitFile() as string;
-
-		// Read the init file and check for the completion marker that omelette adds
-		const content = readFileSync(initFile, "utf8");
-		// Look for the marker comment that omelette uses in its completion block
-		return content.includes(`# begin ${programName} completion`);
-	} catch {
-		// If we can't read the file or detect the shell, assume it's not installed
-		return false;
-	}
-}
+import { buildAliasMap } from "./utils/completion/buildAliasMap.js";
+import { extractCommandNames } from "./utils/completion/extractCommandNames.js";
+import { isCompletionInstalled } from "./utils/completion/isCompletionInstalled.js";
+import { parseWorktreesSync } from "./utils/git/parseWorktrees.js";
+import { execGitSync } from "./utils/system/git-commands.js";
 
 export function setupCompletion(program: Command): void {
 	const complete = omelette("twig <command> [option]");
@@ -113,31 +53,37 @@ export function setupCompletion(program: Command): void {
 		reply(commands);
 	});
 
-	complete.on("option", async ({ reply, line }) => {
-		// Get the command from the completion line provided by omelette
-		const completionLine = line || "";
-		const words = completionLine.toString().trim().split(/\s+/);
-		const command = words[1] || "";
+	complete.on("option", ({ reply, line }) => {
+		try {
+			// Get the command from the completion line provided by omelette
+			const completionLine = line || "";
+			const words = completionLine.toString().trim().split(/\s+/);
+			const command = words[1] || "";
 
-		// Map aliases to full commands (using the dynamically built map)
-		const actualCommand = commandMap[command] || command;
+			// Map aliases to full commands (using the dynamically built map)
+			const actualCommand = commandMap[command] || command;
 
-		if (actualCommand === "branch") {
-			// For branch command, suggest git branches
-			const stdout = await execGitCommand(
-				"git branch --format='%(refname:short)'",
-			);
-			const branches = stdout
-				.split("\n")
-				.map((b) => b.trim())
-				.filter(Boolean);
-			reply(branches);
-		} else if (actualCommand === "delete") {
-			// For delete command, suggest only branches with worktrees
-			const stdout = await execGitCommand("git worktree list --porcelain");
-			const branches = parseBranchesFromWorktreeOutput(stdout);
-			reply(branches);
-		} else {
+			if (actualCommand === "branch") {
+				// For branch command, suggest git branches
+				const stdout = execGitSync(["branch", "--format=%(refname:short)"]);
+				const branches = stdout
+					.split("\n")
+					.map((b) => b.trim())
+					.filter(Boolean);
+				reply(branches);
+			} else if (actualCommand === "delete") {
+				// For delete command, suggest only branches with worktrees
+				// This uses the same logic as `twig ls`
+				const worktrees = parseWorktreesSync();
+				const branches = worktrees
+					.filter((wt) => wt.branch !== undefined)
+					.map((wt) => wt.branch as string);
+				reply(branches);
+			} else {
+				reply([]);
+			}
+		} catch {
+			// Silently fail on errors to avoid breaking completion
 			reply([]);
 		}
 	});
