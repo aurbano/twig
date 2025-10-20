@@ -1,11 +1,11 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { branchExists } from "./utils/git/branchExists.js";
-import { defaultDir } from "./utils/git/defaultDir.js";
-import { detectDefaultBranch } from "./utils/git/detectDefaultBranch.js";
-import { repoName } from "./utils/git/repoName.js";
-import { repoRoot } from "./utils/git/repoRoot.js";
-import { validateBranchName } from "./utils/validation.js";
+import { validateBranchName } from "../validation.js";
+import { branchExists } from "./branchExists.js";
+import { defaultDir } from "./defaultDir.js";
+import { detectDefaultBranch } from "./detectDefaultBranch.js";
+import { repoName } from "./repoName.js";
+import { repoRoot } from "./repoRoot.js";
 
 describe("git module", () => {
 	describe("repoRoot", () => {

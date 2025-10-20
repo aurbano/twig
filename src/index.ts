@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { branch } from "./branch.js";
-import { setupCompletion } from "./completion.js";
+import { completion, setupCompletion } from "./completion.js";
 import { deleteWorktree } from "./delete.js";
 import { initDevcontainer } from "./init-devcontainer.js";
 import { list } from "./list.js";
@@ -32,7 +32,6 @@ program
 	.option("--in-container", "bring up devcontainer then open")
 	.option("-y, --yes", "assume yes to prompts")
 	.action(async (target, opts) => {
-		// Install the prune hook if not already present
 		await installPruneHook();
 		const dir = await branch(target, opts);
 		if (opts.inContainer) await devcontainerUp(dir);
@@ -81,32 +80,13 @@ program
 		await initDevcontainer(opts);
 	});
 
-// Add completion command
 program
 	.command("completion")
 	.description("setup or remove shell completion")
 	.option("--setup", "install shell completion")
 	.option("--cleanup", "remove shell completion")
 	.action(async (opts) => {
-		const { spawnSync } = await import("node:child_process");
-		const nodeExec = process.argv[0] || process.execPath;
-		const scriptPath = process.argv[1] || "";
-
-		if (opts.setup) {
-			// Re-run with setup flag
-			spawnSync(nodeExec, [scriptPath, "--setup-completion"], {
-				stdio: "inherit",
-			});
-		} else if (opts.cleanup) {
-			// Re-run with cleanup flag
-			spawnSync(nodeExec, [scriptPath, "--cleanup-completion"], {
-				stdio: "inherit",
-			});
-		} else {
-			console.log("Usage:");
-			console.log("  twig completion --setup    Install shell completion");
-			console.log("  twig completion --cleanup  Remove shell completion");
-		}
+		await completion(opts);
 	});
 
 // Setup shell completion after all commands are registered

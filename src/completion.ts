@@ -6,6 +6,34 @@ import { isCompletionInstalled } from "./utils/completion/isCompletionInstalled.
 import { parseWorktreesSync } from "./utils/git/parseWorktrees.js";
 import { execGitSync } from "./utils/system/git-commands.js";
 
+/**
+ * Handle the completion command action
+ */
+export async function completion(opts: {
+	setup?: boolean;
+	cleanup?: boolean;
+}): Promise<void> {
+	const { spawnSync } = await import("node:child_process");
+	const nodeExec = process.argv[0] || process.execPath;
+	const scriptPath = process.argv[1] || "";
+
+	if (opts.setup) {
+		// Re-run with setup flag
+		spawnSync(nodeExec, [scriptPath, "--setup-completion"], {
+			stdio: "inherit",
+		});
+	} else if (opts.cleanup) {
+		// Re-run with cleanup flag
+		spawnSync(nodeExec, [scriptPath, "--cleanup-completion"], {
+			stdio: "inherit",
+		});
+	} else {
+		console.log("Usage:");
+		console.log("  twig completion --setup    Install shell completion");
+		console.log("  twig completion --cleanup  Remove shell completion");
+	}
+}
+
 export function setupCompletion(program: Command): void {
 	const complete = omelette("twig <command> [option]");
 
