@@ -1,9 +1,13 @@
 import assert from "node:assert";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { Command } from "commander";
 import {
 	buildAliasMap,
 	extractCommandNames,
+	isCompletionInstalled,
 	parseBranchesFromWorktreeOutput,
 } from "./completion.js";
 
@@ -108,6 +112,203 @@ branch refs/heads/feature/test-branch`;
 
 			assert.strictEqual(branches.length, 1);
 			assert.strictEqual(branches[0], "feature/test-branch");
+		});
+	});
+
+	describe("delete command completion", () => {
+		it("should return branches from worktree list that match what twig ls shows", async () => {
+			// Import the actual git functions to get real data
+			const { parseWorktrees } = await import("./git.js");
+			const { execGitCommand } = await import("./commands/git-commands.js");
+
+			// Get branches the same way `twig ls` does
+			const worktrees = await parseWorktrees();
+			const expectedBranches = worktrees
+				.filter((wt) => wt.branch !== undefined)
+				.map((wt) => wt.branch as string);
+
+			// Get branches the same way completion does for delete command
+			const stdout = await execGitCommand("git worktree list --porcelain");
+			const completionBranches = parseBranchesFromWorktreeOutput(stdout);
+
+			// These should match!
+			assert.strictEqual(
+				completionBranches.length,
+				expectedBranches.length,
+				`Completion returned ${completionBranches.length} branches but twig ls shows ${expectedBranches.length}`,
+			);
+
+			for (const branch of expectedBranches) {
+				assert.ok(
+					completionBranches.includes(branch),
+					`Branch "${branch}" from twig ls not found in completion suggestions`,
+				);
+			}
+		});
+
+		it("should extract command name from completion line correctly", () => {
+			// Test command extraction from various completion scenarios
+			const testCases = [
+				{ line: "twig delete ", expected: "delete" },
+				{ line: "twig d ", expected: "d" },
+				{ line: "twig delete feature-branch", expected: "delete" },
+				{ line: "twig branch ", expected: "branch" },
+				{ line: "twig b ", expected: "b" },
+			];
+
+			for (const { line, expected } of testCases) {
+				const words = line.trim().split(/\s+/);
+				const command = words[1] || "";
+				assert.strictEqual(
+					command,
+					expected,
+					`Failed to extract command from line: "${line}"`,
+				);
+			}
+		});
+
+		it("should map aliases to actual commands", () => {
+			const program = new Command();
+			program.command("branch").alias("b");
+			program.command("delete").alias("d");
+			program.command("list").alias("ls");
+
+			const commandMap = buildAliasMap(program);
+
+			// Test alias mapping
+			assert.strictEqual(commandMap.d, "delete");
+			assert.strictEqual(commandMap.b, "branch");
+			assert.strictEqual(commandMap.ls, "list");
+		});
+	});
+
+	describe("isCompletionInstalled", () => {
+		it("should return false when SHELL environment variable is not set", () => {
+			const originalShell = process.env.SHELL;
+			delete process.env.SHELL;
+
+			const result = isCompletionInstalled();
+
+			// Restore original SHELL
+			if (originalShell) {
+				process.env.SHELL = originalShell;
+			}
+
+			assert.strictEqual(result, false);
+		});
+
+		it("should return false for unsupported shell", () => {
+			const originalShell = process.env.SHELL;
+			process.env.SHELL = "/bin/unknown-shell";
+
+			const result = isCompletionInstalled();
+
+			// Restore original SHELL
+			if (originalShell) {
+				process.env.SHELL = originalShell;
+			}
+
+			assert.strictEqual(result, false);
+		});
+
+		it("should return false when init file doesn't exist", () => {
+			const originalHome = process.env.HOME;
+			// Set HOME to a non-existent directory
+			const tempDir = mkdtempSync(join(tmpdir(), "twig-test-"));
+			process.env.HOME = join(tempDir, "nonexistent");
+
+			const result = isCompletionInstalled();
+
+			// Restore original HOME
+			if (originalHome) {
+				process.env.HOME = originalHome;
+			}
+
+			assert.strictEqual(result, false);
+		});
+
+		it("should return false when completion marker is not in init file", () => {
+			const originalHome = process.env.HOME;
+			const originalShell = process.env.SHELL;
+
+			// Create a temporary directory and init file
+			const tempDir = mkdtempSync(join(tmpdir(), "twig-test-"));
+			process.env.HOME = tempDir;
+			process.env.SHELL = "/bin/zsh";
+
+			const initFile = join(tempDir, ".zshrc");
+			writeFileSync(initFile, "# Some other content\nalias ll='ls -la'\n");
+
+			const result = isCompletionInstalled();
+
+			// Restore original values
+			if (originalHome) {
+				process.env.HOME = originalHome;
+			}
+			if (originalShell) {
+				process.env.SHELL = originalShell;
+			}
+
+			assert.strictEqual(result, false);
+		});
+
+		it("should return true when completion marker is found in init file", () => {
+			const originalHome = process.env.HOME;
+			const originalShell = process.env.SHELL;
+
+			// Create a temporary directory and init file
+			const tempDir = mkdtempSync(join(tmpdir(), "twig-test-"));
+			process.env.HOME = tempDir;
+			process.env.SHELL = "/bin/zsh";
+
+			const initFile = join(tempDir, ".zshrc");
+			writeFileSync(
+				initFile,
+				"# Some content\n# begin twig completion\n. <(twig --completion)\n# end twig completion\n",
+			);
+
+			const result = isCompletionInstalled();
+
+			// Restore original values
+			if (originalHome) {
+				process.env.HOME = originalHome;
+			}
+			if (originalShell) {
+				process.env.SHELL = originalShell;
+			}
+
+			assert.strictEqual(result, true);
+		});
+
+		it("should detect completion for custom program name", () => {
+			const originalHome = process.env.HOME;
+			const originalShell = process.env.SHELL;
+
+			// Create a temporary directory and init file
+			const tempDir = mkdtempSync(join(tmpdir(), "twig-test-"));
+			process.env.HOME = tempDir;
+			process.env.SHELL = "/bin/bash";
+
+			// Use the correct init file based on platform (macOS uses .bash_profile)
+			const initFileName =
+				process.platform === "darwin" ? ".bash_profile" : ".bashrc";
+			const initFile = join(tempDir, initFileName);
+			writeFileSync(
+				initFile,
+				"# begin mycli completion\nsource ~/.mycli/completion.sh\n# end mycli completion\n",
+			);
+
+			const result = isCompletionInstalled("mycli");
+
+			// Restore original values
+			if (originalHome) {
+				process.env.HOME = originalHome;
+			}
+			if (originalShell) {
+				process.env.SHELL = originalShell;
+			}
+
+			assert.strictEqual(result, true);
 		});
 	});
 });

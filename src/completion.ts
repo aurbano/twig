@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import omelette from "omelette";
 import { execGitCommand } from "./commands/git-commands.js";
@@ -42,11 +43,43 @@ export function parseBranchesFromWorktreeOutput(stdout: string): string[] {
 	return branches;
 }
 
+/**
+ * Check if completion is already installed in the shell init file
+ * Uses omelette's own methods to determine the init file path
+ */
+export function isCompletionInstalled(programName = "twig"): boolean {
+	try {
+		// Create a temporary omelette instance to access its methods
+		// biome-ignore lint/suspicious/noExplicitAny: omelette doesn't have TypeScript definitions for these internal methods
+		const tempComplete = omelette(`${programName} <command>`) as any;
+
+		// Use omelette's method to get the init file path
+		const initFile = tempComplete.getDefaultShellInitFile() as string;
+
+		// Read the init file and check for the completion marker that omelette adds
+		const content = readFileSync(initFile, "utf8");
+		// Look for the marker comment that omelette uses in its completion block
+		return content.includes(`# begin ${programName} completion`);
+	} catch {
+		// If we can't read the file or detect the shell, assume it's not installed
+		return false;
+	}
+}
+
 export function setupCompletion(program: Command): void {
 	const complete = omelette("twig <command> [option]");
 
 	// Check for setup/cleanup flags first, before any other logic
 	if (process.argv.includes("--setup-completion")) {
+		// Check if completion is already installed
+		if (isCompletionInstalled()) {
+			process.stdout.write("\n✓ Shell completion is already installed!\n\n");
+			process.stdout.write(
+				"To remove and reinstall, run: twig completion --cleanup\n\n",
+			);
+			process.exit(0);
+		}
+
 		// Print message before calling setupShellInitFile (which exits the process)
 		process.stdout.write("\n✓ Shell completion installed successfully!\n\n");
 		process.stdout.write("To activate it in your current terminal, run:\n\n");
@@ -80,14 +113,10 @@ export function setupCompletion(program: Command): void {
 		reply(commands);
 	});
 
-	complete.on("option", async ({ reply }) => {
-		// Get the command from the line - check multiple environment variables
-		const line =
-			process.env.COMP_LINE ||
-			process.env.COMP_WORDS ||
-			process.env.COMP_POINT ||
-			"";
-		const words = line.toString().trim().split(/\s+/);
+	complete.on("option", async ({ reply, line }) => {
+		// Get the command from the completion line provided by omelette
+		const completionLine = line || "";
+		const words = completionLine.toString().trim().split(/\s+/);
 		const command = words[1] || "";
 
 		// Map aliases to full commands (using the dynamically built map)
