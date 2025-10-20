@@ -1,65 +1,156 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import {
+	formatMounts,
+	formatPackageList,
+	formatPorts,
+	formatPostCreateCommand,
+	generateDevcontainerJson,
+	generateDockerfileContent,
+	generateDockerignoreContent,
+} from "./devcontainer.js";
+import {
+	validateDockerImage,
+	validatePackageNames,
+	validatePortList,
+} from "./validation.js";
 
 describe("devcontainer module", () => {
-	describe("dockerfile package formatting", () => {
-		it("should format packages correctly without trailing backslash on last item", () => {
+	describe("formatPackageList", () => {
+		it("should format package list without trailing backslash on last item", () => {
 			const packages = "git curl wget";
-			const pkgList = packages.split(/\s+/);
-			const pkgLines = pkgList
-				.map((p, i) => `    ${p}${i < pkgList.length - 1 ? " \\" : ""}`)
-				.join("\n");
+			const pkgLines = formatPackageList(packages);
 
-			// Should have backslashes for all but the last
 			assert.ok(pkgLines.includes("git \\"));
 			assert.ok(pkgLines.includes("curl \\"));
-			// Last package should NOT have trailing backslash in its line
-			assert.ok(pkgLines.includes("wget"));
 			assert.ok(!pkgLines.includes("wget \\"));
-
-			// Verify each line
-			const lines = pkgLines.split("\n");
-			assert.strictEqual(lines.length, 3);
-			assert.ok(lines[0]?.includes("git \\"));
-			assert.ok(lines[1]?.includes("curl \\"));
-			assert.ok(lines[2]?.trim() === "wget");
+			assert.ok(pkgLines.endsWith("wget"));
 		});
 
 		it("should handle single package correctly", () => {
 			const packages = "git";
-			const pkgList = packages.split(/\s+/);
-			const pkgLines = pkgList
-				.map((p, i) => `    ${p}${i < pkgList.length - 1 ? " \\" : ""}`)
-				.join("\n");
+			const pkgLines = formatPackageList(packages);
 
-			// Single package should NOT have trailing backslash
 			assert.ok(!pkgLines.includes("\\"));
 			assert.strictEqual(pkgLines.trim(), "git");
 		});
 	});
 
-	describe("port list formatting", () => {
-		it("should format ports correctly", () => {
-			const ports = "3000,8080";
-			const formatted = `[${ports
-				.split(",")
-				.map((p) => `"${p.trim()}"`)
-				.join(",")}]`;
+	describe("generateDockerfileContent", () => {
+		it("should generate correct Dockerfile structure", () => {
+			const image = "ubuntu:22.04";
+			const packages = "git curl";
+			const content = generateDockerfileContent(image, packages);
 
-			assert.strictEqual(formatted, '["3000","8080"]');
+			assert.ok(content.startsWith("FROM ubuntu:22.04"));
+			assert.ok(content.includes("SHELL"));
+			assert.ok(content.includes("DEBIAN_FRONTEND=noninteractive"));
+			assert.ok(content.includes("apt-get install"));
+			assert.ok(content.includes("apt-get clean"));
 		});
 
-		it("should handle empty ports by returning empty array", () => {
-			// When ports is empty or not provided, should return []
-			const emptyArray = "[]";
-			assert.strictEqual(emptyArray, "[]");
+		it("should generate Dockerfile without packages", () => {
+			const image = "ubuntu:22.04";
+			const packages = "";
+			const content = generateDockerfileContent(image, packages);
+
+			assert.ok(content.startsWith("FROM ubuntu:22.04"));
+			assert.ok(content.includes("SHELL"));
+			assert.ok(!content.includes("apt-get install"));
 		});
 	});
 
-	describe("validation integration", () => {
-		it("should validate docker image names", async () => {
-			const { validateDockerImage } = await import("./validation.js");
+	describe("formatPorts", () => {
+		it("should format ports array correctly", () => {
+			const ports = "3000,8080,9000";
+			const forwardPorts = formatPorts(ports);
 
+			assert.strictEqual(forwardPorts, '["3000","8080","9000"]');
+		});
+
+		it("should handle empty ports as empty array", () => {
+			const ports = "";
+			const forwardPorts = formatPorts(ports);
+
+			assert.strictEqual(forwardPorts, "[]");
+		});
+
+		it("should trim whitespace from ports", () => {
+			const ports = " 3000 , 8080 , 9000 ";
+			const forwardPorts = formatPorts(ports);
+
+			assert.strictEqual(forwardPorts, '["3000","8080","9000"]');
+		});
+	});
+
+	describe("formatMounts", () => {
+		it("should format mounts for node_modules volume", () => {
+			const mounts = formatMounts(true);
+
+			assert.ok(mounts.includes("node_modules"));
+			assert.ok(mounts.includes("type=volume"));
+		});
+
+		it("should return empty array when not mounting node_modules", () => {
+			const mounts = formatMounts(false);
+
+			assert.strictEqual(mounts, "[]");
+		});
+	});
+
+	describe("formatPostCreateCommand", () => {
+		it("should format postCreateCommand with value", () => {
+			const postCreateCommand = formatPostCreateCommand("npm install");
+
+			assert.strictEqual(postCreateCommand, '"npm install"');
+		});
+
+		it("should return null for empty postCreateCommand", () => {
+			const postCreateCommand = formatPostCreateCommand("");
+
+			assert.strictEqual(postCreateCommand, "null");
+		});
+	});
+
+	describe("generateDevcontainerJson", () => {
+		it("should generate valid devcontainer.json content", () => {
+			const json = generateDevcontainerJson({
+				ports: "3000,8080",
+				mountNodeModules: true,
+				postcreate: "npm install",
+			});
+
+			assert.ok(json.includes('"forwardPorts": ["3000","8080"]'));
+			assert.ok(json.includes("node_modules"));
+			assert.ok(json.includes('"postCreateCommand": "npm install"'));
+		});
+
+		it("should handle minimal options", () => {
+			const json = generateDevcontainerJson({
+				ports: "",
+				mountNodeModules: false,
+				postcreate: "",
+			});
+
+			assert.ok(json.includes('"forwardPorts": []'));
+			assert.ok(json.includes('"mounts": []'));
+			assert.ok(json.includes('"postCreateCommand": null'));
+		});
+	});
+
+	describe("generateDockerignoreContent", () => {
+		it("should contain standard ignores", () => {
+			const dockerignoreContent = generateDockerignoreContent();
+
+			assert.ok(dockerignoreContent.includes(".git"));
+			assert.ok(dockerignoreContent.includes("node_modules"));
+			assert.ok(dockerignoreContent.includes("__pycache__"));
+			assert.ok(dockerignoreContent.includes(".DS_Store"));
+		});
+	});
+
+	describe("validation", () => {
+		it("should validate docker image names", () => {
 			assert.throws(() => validateDockerImage(""), /cannot be empty/);
 			assert.throws(() => validateDockerImage("Ubuntu"), /must be lowercase/);
 			assert.throws(
@@ -73,9 +164,7 @@ describe("devcontainer module", () => {
 			);
 		});
 
-		it("should validate port lists", async () => {
-			const { validatePortList } = await import("./validation.js");
-
+		it("should validate port lists", () => {
 			assert.throws(() => validatePortList("abc"), /must be a number/);
 			assert.throws(() => validatePortList("0"), /between 1 and 65535/);
 			assert.throws(() => validatePortList("65536"), /between 1 and 65535/);
@@ -85,9 +174,7 @@ describe("devcontainer module", () => {
 			assert.doesNotThrow(() => validatePortList(""));
 		});
 
-		it("should validate package names", async () => {
-			const { validatePackageNames } = await import("./validation.js");
-
+		it("should validate package names", () => {
 			assert.throws(
 				() => validatePackageNames("git;rm -rf /"),
 				/shell metacharacters/,

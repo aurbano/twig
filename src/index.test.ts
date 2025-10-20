@@ -1,119 +1,198 @@
 import assert from "node:assert";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
 import { describe, it } from "node:test";
-import { Command } from "commander";
+import { fileURLToPath } from "node:url";
 
-describe("CLI", () => {
-	describe("command registration", () => {
-		it("should register branch command with correct options", () => {
-			const program = new Command();
-			program
-				.name("twig")
-				.description(
-					"Git worktree manager with optional Dev Container integration",
-				)
-				.version("0.1.0");
+// Get the path to the compiled CLI entry point
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const cliPath = path.resolve(__dirname, "index.js");
 
-			const branchCmd = program
-				.command("branch")
-				.argument("<branchOrPath>", "branch name or worktree path")
-				.option("--base <base>", "base branch for new worktrees")
-				.option(
-					"-d, --dir <dir>",
-					"target directory for new worktrees (default ../<repo>-<branch>)",
-				)
-				.option("--in-container", "bring up devcontainer then open")
-				.option("-y, --yes", "assume yes to prompts");
+/**
+ * Helper to run the CLI and return stdout/stderr
+ */
+function runCLI(args: string[]): {
+	stdout: string;
+	stderr: string;
+	status: number | null;
+} {
+	const result = spawnSync(process.execPath, [cliPath, ...args], {
+		encoding: "utf-8",
+		timeout: 5000,
+	});
 
-			assert.strictEqual(branchCmd.name(), "branch");
-			assert.strictEqual(branchCmd.options.length, 4);
+	return {
+		stdout: result.stdout || "",
+		stderr: result.stderr || "",
+		status: result.status,
+	};
+}
+
+describe("twig CLI", () => {
+	describe("help output", () => {
+		it("should display help with -h flag", () => {
+			const { stdout, status } = runCLI(["-h"]);
+
+			assert.strictEqual(status, 0);
+			assert.ok(stdout.includes("twig"), "should contain program name");
+			assert.ok(
+				stdout.includes("Git worktree manager"),
+				"should contain description",
+			);
+			assert.ok(stdout.includes("Commands:"), "should list commands");
 		});
 
-		it("should register list command", () => {
-			const program = new Command();
-			const listCmd = program.command("list");
+		it("should display help with --help flag", () => {
+			const { stdout, status } = runCLI(["--help"]);
 
-			assert.strictEqual(listCmd.name(), "list");
-		});
-
-		it("should register delete command with options", () => {
-			const program = new Command();
-			const deleteCmd = program
-				.command("delete")
-				.argument("<branchOrPath>")
-				.option("--keep-branch", "do not delete the git branch")
-				.option("-y, --yes", "assume yes to prompts");
-
-			assert.strictEqual(deleteCmd.name(), "delete");
-			assert.strictEqual(deleteCmd.options.length, 2);
-		});
-
-		it("should register init-devcontainer command with options", () => {
-			const program = new Command();
-			const initCmd = program
-				.command("init-devcontainer")
-				.option(
-					"--image <img>",
-					"base image",
-					"mcr.microsoft.com/devcontainers/base:ubuntu",
-				)
-				.option("--packages <list>", "space-separated apt packages")
-				.option("--ports <csv>", "e.g. 3000,8000")
-				.option("--postcreate <cmd>", "postCreateCommand")
-				.option("--mount-node-modules", "add node_modules named volume mount");
-
-			assert.strictEqual(initCmd.name(), "init-devcontainer");
-			assert.strictEqual(initCmd.options.length, 5);
+			assert.strictEqual(status, 0);
+			assert.ok(stdout.includes("twig"));
+			assert.ok(stdout.includes("Commands:"));
 		});
 	});
 
-	describe("default values", () => {
-		it("should auto-detect base branch in branch command", () => {
-			const program = new Command();
-			const branchCmd = program
-				.command("branch")
-				.argument("<branchOrPath>")
-				.option("--base <base>", "base branch for new worktrees");
+	describe("version output", () => {
+		it("should display version with -V flag", () => {
+			const { stdout, status } = runCLI(["-V"]);
 
-			// Base branch is now auto-detected, no default value set
-			const baseOption = branchCmd.options.find((opt) => opt.long === "--base");
-			assert.strictEqual(baseOption?.defaultValue, undefined);
+			assert.strictEqual(status, 0);
+			assert.match(stdout.trim(), /^\d+\.\d+\.\d+$/);
 		});
 
-		it("should have correct default devcontainer image", () => {
-			const program = new Command();
-			const initCmd = program
-				.command("init-devcontainer")
-				.option(
-					"--image <img>",
-					"base image",
-					"mcr.microsoft.com/devcontainers/base:ubuntu",
-				);
+		it("should display version with --version flag", () => {
+			const { stdout, status } = runCLI(["--version"]);
 
-			const imageOption = initCmd.options.find((opt) => opt.long === "--image");
-			assert.ok(imageOption?.defaultValue?.startsWith("mcr.microsoft.com"));
+			assert.strictEqual(status, 0);
+			assert.match(stdout.trim(), /^\d+\.\d+\.\d+$/);
+		});
+	});
+
+	describe("commands registration", () => {
+		it("should register branch command and alias", () => {
+			const { stdout } = runCLI(["branch", "-h"]);
+
+			assert.ok(stdout.includes("branch"));
+			assert.ok(stdout.includes("branchOrPath"));
+		});
+
+		it("should register list command and alias", () => {
+			const { stdout } = runCLI(["list", "-h"]);
+
+			assert.ok(stdout.includes("list"));
+		});
+
+		it("should work with ls alias", () => {
+			const { stdout } = runCLI(["ls", "-h"]);
+
+			assert.ok(stdout.includes("list"));
+		});
+
+		it("should register delete command and alias", () => {
+			const { stdout } = runCLI(["delete", "-h"]);
+
+			assert.ok(stdout.includes("delete"));
+			assert.ok(stdout.includes("branchOrPath"));
+		});
+
+		it("should work with d alias", () => {
+			const { stdout } = runCLI(["d", "-h"]);
+
+			assert.ok(stdout.includes("delete"));
+		});
+
+		it("should register prune command and alias", () => {
+			const { stdout } = runCLI(["prune", "-h"]);
+
+			assert.ok(stdout.includes("prune"));
+			assert.ok(
+				stdout.includes("remove worktrees for branches that no longer exist"),
+			);
+		});
+
+		it("should work with p alias", () => {
+			const { stdout } = runCLI(["p", "-h"]);
+
+			assert.ok(stdout.includes("prune"));
+		});
+
+		it("should register init-devcontainer command", () => {
+			const { stdout } = runCLI(["init-devcontainer", "-h"]);
+
+			assert.ok(stdout.includes("init-devcontainer"));
+			assert.ok(stdout.includes("--image"));
+		});
+
+		it("should work with i alias", () => {
+			const { stdout } = runCLI(["i", "-h"]);
+
+			assert.ok(stdout.includes("init-devcontainer"));
+		});
+
+		it("should register completion command", () => {
+			const { stdout } = runCLI(["completion", "-h"]);
+
+			assert.ok(stdout.includes("completion"));
+			assert.ok(stdout.includes("--setup"));
+			assert.ok(stdout.includes("--cleanup"));
+		});
+	});
+
+	describe("command options", () => {
+		it("branch command should have expected options", () => {
+			const { stdout } = runCLI(["branch", "-h"]);
+
+			assert.ok(stdout.includes("--base"), "should have --base option");
+			assert.ok(stdout.includes("--dir"), "should have --dir option");
+			assert.ok(
+				stdout.includes("--in-container"),
+				"should have --in-container option",
+			);
+			assert.ok(stdout.includes("--yes"), "should have --yes option");
+		});
+
+		it("delete command should have expected options", () => {
+			const { stdout } = runCLI(["delete", "-h"]);
+
+			assert.ok(
+				stdout.includes("--keep-branch"),
+				"should have --keep-branch option",
+			);
+			assert.ok(stdout.includes("--yes"), "should have --yes option");
+		});
+
+		it("init-devcontainer command should have expected options", () => {
+			const { stdout } = runCLI(["init-devcontainer", "-h"]);
+
+			assert.ok(stdout.includes("--image"), "should have --image option");
+			assert.ok(stdout.includes("--packages"), "should have --packages option");
+			assert.ok(stdout.includes("--ports"), "should have --ports option");
+			assert.ok(
+				stdout.includes("--postcreate"),
+				"should have --postcreate option",
+			);
+			assert.ok(
+				stdout.includes("--mount-node-modules"),
+				"should have --mount-node-modules option",
+			);
 		});
 	});
 
 	describe("error handling", () => {
-		it("should have error handler that extracts stderr or message", () => {
-			const testErrors = [
-				{ stderr: "git error", message: "ignored" },
-				{ message: "regular error" },
-				"string error",
-			];
+		it("should display error for unknown command", () => {
+			const { stderr, status } = runCLI(["unknown-command"]);
 
-			for (const err of testErrors) {
-				let result: string;
-				if (err && typeof err === "object" && "stderr" in err) {
-					result = err.stderr;
-				} else if (err && typeof err === "object" && "message" in err) {
-					result = err.message;
-				} else {
-					result = String(err);
-				}
+			assert.notStrictEqual(status, 0, "should exit with non-zero status");
+			assert.ok(
+				stderr.includes("unknown command") || stderr.includes("Unknown"),
+				"should show error message",
+			);
+		});
 
-				assert.ok(result.length > 0);
-			}
+		it("should handle missing required arguments gracefully", () => {
+			const { status } = runCLI(["delete"]);
+
+			assert.notStrictEqual(status, 0, "should exit with non-zero status");
 		});
 	});
 });

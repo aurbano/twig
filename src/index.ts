@@ -10,6 +10,7 @@ import {
 	openWorktree,
 	pruneOrphanedWorktrees,
 } from "./git.js";
+import { extractErrorMessage } from "./utils/extractErrorMessage.js";
 
 const program = new Command();
 program
@@ -113,6 +114,6 @@ program
 setupCompletion(program);
 
 program.parseAsync().catch((err) => {
-	console.error(err?.stderr || err?.message || err);
+	console.error(extractErrorMessage(err));
 	process.exit(1);
 });

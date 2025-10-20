@@ -1,37 +1,11 @@
-import { exec, spawn } from "node:child_process";
-import { promisify } from "node:util";
+import { commandExists, spawnDetached } from "./commands/process-operations.js";
 import type { EditorConfig } from "./config.js";
 import { getConfigPath, loadEditorConfig } from "./config.js";
-
-const execAsync = promisify(exec);
-
-/**
- * Check if a command exists on the system PATH
- */
-async function commandExists(cmd: string): Promise<boolean> {
-	try {
-		await execAsync(`command -v ${cmd}`);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-/**
- * Launch editor in detached mode without waiting
- */
-function launchEditor(cmd: string, args: string[], cwd: string): void {
-	spawn(cmd, args, {
-		cwd,
-		detached: true,
-		stdio: "ignore",
-	}).unref();
-}
 
 /**
  * Get a user-friendly name for common editors
  */
-function getEditorName(command: string): string {
+export function getEditorName(command: string): string {
 	const names: Record<string, string> = {
 		cursor: "Cursor",
 		code: "VS Code",
@@ -47,7 +21,7 @@ function getEditorName(command: string): string {
 /**
  * Resolve editor config to command and args
  */
-function resolveEditorCommand(config: EditorConfig): {
+export function resolveEditorCommand(config: EditorConfig): {
 	command: string;
 	args: string[];
 } {
@@ -86,7 +60,7 @@ export async function openInEditor(dir: string): Promise<void> {
 
 		// Try to launch the configured editor
 		if (await commandExists(command)) {
-			launchEditor(command, args, dir);
+			spawnDetached(command, args, dir);
 			console.log(`Opened in ${getEditorName(command)}: ${dir}`);
 			return;
 		}
@@ -102,13 +76,13 @@ export async function openInEditor(dir: string): Promise<void> {
 
 	// Fallback: try common editors
 	if (await commandExists("cursor")) {
-		launchEditor("cursor", ["."], dir);
+		spawnDetached("cursor", ["."], dir);
 		console.log(`Opened in Cursor: ${dir}`);
 		return;
 	}
 
 	if (await commandExists("code")) {
-		launchEditor("code", ["."], dir);
+		spawnDetached("code", ["."], dir);
 		console.log(`Opened in VS Code: ${dir}`);
 		return;
 	}

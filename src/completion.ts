@@ -1,6 +1,46 @@
 import type { Command } from "commander";
-import { execaCommand } from "execa";
 import omelette from "omelette";
+import { execGitCommand } from "./commands/git-commands.js";
+
+/**
+ * Extract command names from a Commander program
+ */
+export function extractCommandNames(program: Command): string[] {
+	return program.commands.map((cmd) => cmd.name());
+}
+
+/**
+ * Build a map of aliases to their full command names
+ */
+export function buildAliasMap(program: Command): Record<string, string> {
+	const commandMap: Record<string, string> = {};
+	for (const cmd of program.commands) {
+		const name = cmd.name();
+		const aliases = cmd.aliases();
+		for (const alias of aliases) {
+			commandMap[alias] = name;
+		}
+	}
+	return commandMap;
+}
+
+/**
+ * Parse branch names from git worktree list porcelain output
+ */
+export function parseBranchesFromWorktreeOutput(stdout: string): string[] {
+	const branches: string[] = [];
+	const lines = stdout.split("\n");
+	for (const line of lines) {
+		if (line.startsWith("branch ")) {
+			// Extract branch name from "branch refs/heads/branch-name"
+			const branch = line.replace(/^branch refs\/heads\//, "").trim();
+			if (branch) {
+				branches.push(branch);
+			}
+		}
+	}
+	return branches;
+}
 
 export function setupCompletion(program: Command): void {
 	const complete = omelette("twig <command> [option]");
@@ -30,17 +70,10 @@ export function setupCompletion(program: Command): void {
 	}
 
 	// Dynamically extract commands from the Commander program
-	const commands = program.commands.map((cmd) => cmd.name());
+	const commands = extractCommandNames(program);
 
 	// Build alias map dynamically
-	const commandMap: Record<string, string> = {};
-	for (const cmd of program.commands) {
-		const name = cmd.name();
-		const aliases = cmd.aliases();
-		for (const alias of aliases) {
-			commandMap[alias] = name;
-		}
-	}
+	const commandMap = buildAliasMap(program);
 
 	// Setup completion handlers
 	complete.on("command", ({ reply }) => {
@@ -62,38 +95,19 @@ export function setupCompletion(program: Command): void {
 
 		if (actualCommand === "branch") {
 			// For branch command, suggest git branches
-			try {
-				const { stdout } = await execaCommand(
-					"git branch --format='%(refname:short)'",
-				);
-				const branches = stdout
-					.split("\n")
-					.map((b) => b.trim())
-					.filter(Boolean);
-				reply(branches);
-			} catch {
-				reply([]);
-			}
+			const stdout = await execGitCommand(
+				"git branch --format='%(refname:short)'",
+			);
+			const branches = stdout
+				.split("\n")
+				.map((b) => b.trim())
+				.filter(Boolean);
+			reply(branches);
 		} else if (actualCommand === "delete") {
 			// For delete command, suggest only branches with worktrees
-			try {
-				const { stdout } = await execaCommand("git worktree list --porcelain");
-				// Parse worktree list to get branches
-				const branches: string[] = [];
-				const lines = stdout.split("\n");
-				for (const line of lines) {
-					if (line.startsWith("branch ")) {
-						// Extract branch name from "branch refs/heads/branch-name"
-						const branch = line.replace(/^branch refs\/heads\//, "").trim();
-						if (branch) {
-							branches.push(branch);
-						}
-					}
-				}
-				reply(branches);
-			} catch {
-				reply([]);
-			}
+			const stdout = await execGitCommand("git worktree list --porcelain");
+			const branches = parseBranchesFromWorktreeOutput(stdout);
+			reply(branches);
 		} else {
 			reply([]);
 		}
