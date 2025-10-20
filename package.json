@@ -34,6 +34,7 @@
 		"typecheck": "tsc --noEmit",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
+		"lint:fix-unsafe": "biome check --unsafe --write .",
 		"format": "biome format --write .",
 		"test": "c8 node --test 'dist/**/*.test.js'",
 		"pretest": "npm run build",

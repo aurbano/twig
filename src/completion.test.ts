@@ -40,9 +40,9 @@ describe("completion module", () => {
 
 			const commandMap = buildAliasMap(program);
 
-			assert.strictEqual(commandMap["b"], "branch");
-			assert.strictEqual(commandMap["ls"], "list");
-			assert.strictEqual(commandMap["d"], "delete");
+			assert.strictEqual(commandMap.b, "branch");
+			assert.strictEqual(commandMap.ls, "list");
+			assert.strictEqual(commandMap.d, "delete");
 		});
 
 		it("should handle commands with multiple aliases", () => {
@@ -51,8 +51,8 @@ describe("completion module", () => {
 
 			const commandMap = buildAliasMap(program);
 
-			assert.strictEqual(commandMap["b"], "branch");
-			assert.strictEqual(commandMap["br"], "branch");
+			assert.strictEqual(commandMap.b, "branch");
+			assert.strictEqual(commandMap.br, "branch");
 		});
 
 		it("should return empty map for program with no aliases", () => {

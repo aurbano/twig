@@ -439,7 +439,7 @@ twig prune --yes 2>/dev/null || true
 		}
 
 		// Append to existing hook
-		await writeFile(hookPath, existingContent + `\n${hookContent}`);
+		await writeFile(hookPath, `${existingContent}\n${hookContent}`);
 		console.log("Updated existing post-checkout hook to include twig prune.");
 	} catch {
 		// File doesn't exist, create it
