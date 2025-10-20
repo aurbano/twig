@@ -2,7 +2,6 @@ import path from "node:path";
 import { confirm } from "@inquirer/prompts";
 import { execa } from "execa";
 import {
-	copyFilesWithFilter,
 	fileExists,
 	mkdir,
 	readFile,
@@ -13,7 +12,6 @@ import {
 	execGitBranchDelete,
 	execGitCommonDir,
 	execGitFetch,
-	execGitLsFiles,
 	execGitRepoRoot,
 	execGitShowRef,
 	execGitWorktreeAdd,
@@ -143,28 +141,40 @@ async function copyUntrackedFiles(
 	sourceDir: string,
 	destDir: string,
 ): Promise<void> {
-	// Get list of tracked files relative to the repo root
-	const trackedFilesList = await execGitLsFiles(sourceDir);
-	const trackedFiles = new Set(trackedFilesList);
-
-	// Copy files with filtering
 	try {
-		await copyFilesWithFilter(sourceDir, destDir, (src, _dest) => {
-			const relativePath = path.relative(sourceDir, src);
+		// Get list of untracked files using git ls-files --others --exclude-standard
+		// This only lists untracked files that aren't ignored by .gitignore
+		const { stdout: untrackedOutput } = await execa(
+			"git",
+			["ls-files", "--others", "--exclude-standard"],
+			{ cwd: sourceDir },
+		);
 
-			// Always exclude .git directory
-			if (relativePath === ".git" || relativePath.startsWith(".git/")) {
-				return false;
-			}
+		const untrackedFiles = untrackedOutput
+			.split("\n")
+			.map((f) => f.trim())
+			.filter((f) => f.length > 0);
 
-			// Skip tracked files (they're already checked out)
-			if (trackedFiles.has(relativePath)) {
-				return false;
-			}
+		if (untrackedFiles.length === 0) {
+			return; // No untracked files to copy
+		}
 
-			return true;
-		});
-		console.log("Copied untracked files from base branch");
+		// Copy each untracked file individually
+		const fs = await import("node:fs/promises");
+		for (const file of untrackedFiles) {
+			const srcPath = path.join(sourceDir, file);
+			const destPath = path.join(destDir, file);
+
+			try {
+				// Ensure parent directory exists
+				await mkdir(path.dirname(destPath));
+				// Copy the file
+				await fs.copyFile(srcPath, destPath);
+			} catch {}
+		}
+		console.log(
+			`Copied ${untrackedFiles.length} untracked file(s) from base branch`,
+		);
 	} catch (err) {
 		// Non-fatal: log but don't fail the worktree creation
 		console.warn(

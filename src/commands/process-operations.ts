@@ -20,11 +20,12 @@ export async function commandExists(cmd: string): Promise<boolean> {
  * Launch a process in detached mode without waiting
  */
 export function spawnDetached(cmd: string, args: string[], cwd: string): void {
-	spawn(cmd, args, {
+	const child = spawn(cmd, args, {
 		cwd,
 		detached: true,
-		stdio: "ignore",
-	}).unref();
+		stdio: ["ignore", "ignore", "ignore"],
+	});
+	child.unref();
 }
 
 /**
