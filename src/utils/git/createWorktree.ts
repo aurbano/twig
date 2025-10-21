@@ -11,6 +11,7 @@ import { repoRoot } from "./repoRoot.js";
 /**
  * Copies untracked files from source directory to destination directory.
  * Skips git-tracked files since they're already checked out in the worktree.
+ * Includes git-ignored files like node_modules.
  * @param sourceDir - Source directory (base branch's worktree)
  * @param destDir - Destination directory (new worktree)
  */
@@ -19,11 +20,11 @@ async function copyUntrackedFiles(
 	destDir: string,
 ): Promise<void> {
 	try {
-		// Get list of untracked files using git ls-files --others --exclude-standard
-		// This only lists untracked files that aren't ignored by .gitignore
+		// Get list of untracked files using git ls-files --others
+		// This includes ALL untracked files, including those ignored by .gitignore
 		const { stdout: untrackedOutput } = await execa(
 			"git",
-			["ls-files", "--others", "--exclude-standard"],
+			["ls-files", "--others"],
 			{ cwd: sourceDir },
 		);
 
