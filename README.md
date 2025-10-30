@@ -1,6 +1,6 @@
 # 🌿 Twig
 
-![NPM Version](https://img.shields.io/npm/v/%40aurbano%2Ftwig)
+[![NPM Version](https://img.shields.io/npm/v/%40aurbano%2Ftwig)](https://www.npmjs.com/package/@aurbano/twig)
 
 Lightweight CLI to manage multiple Git worktrees with optional [VSCode Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) integration. Perfect for concurrent feature development with LLM coding assistants.
 
