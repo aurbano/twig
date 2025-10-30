@@ -1,36 +1,26 @@
 import { fileExists } from "../system/fs-operations.js";
-import { execGitShowRef, execGitWorktreeAdd } from "../system/git-commands.js";
+import { execGitWorktreeAdd } from "../system/git-commands.js";
 import { validateBranchName } from "../validation.js";
 import { copyUntrackedFiles } from "./copyUntrackedFiles.js";
 import { defaultDir } from "./defaultDir.js";
-import { detectDefaultBranch } from "./detectDefaultBranch.js";
-import { ensureBaseUpToDate } from "./ensureBaseUpToDate.js";
 import { repoRoot } from "./repoRoot.js";
 
 /**
- * Creates a new git worktree with a new branch.
- * @param branch - Name of the new branch to create
+ * Creates a git worktree for an existing branch.
+ * @param branch - Name of the existing branch
  * @param opts - Options for worktree creation
  * @returns Path to the created worktree directory
  */
-export async function createWorktree(
+export async function createWorktreeForExistingBranch(
 	branch: string,
-	opts: { base?: string; dir?: string; yes?: boolean },
+	opts: { dir?: string; yes?: boolean } = {},
 ) {
 	validateBranchName(branch);
 
-	const base = opts.base ?? (await detectDefaultBranch());
-	const baseRef = await ensureBaseUpToDate(base);
-
-	// Capture the base branch's working directory path for copying untracked files
+	// Capture the repo root for copying untracked files
 	const baseDir = await repoRoot();
 
 	const dir = opts.dir ?? (await defaultDir(branch));
-
-	// Check if branch exists (prevent accidental overwrites)
-	if (await execGitShowRef(`refs/heads/${branch}`)) {
-		throw new Error(`Branch '${branch}' already exists.`);
-	}
 
 	// Check if directory exists (git will also check, but we provide a better error message)
 	if (await fileExists(dir)) {
@@ -39,7 +29,8 @@ export async function createWorktree(
 		);
 	}
 
-	await execGitWorktreeAdd(dir, ["-b", branch, baseRef]);
+	// Create worktree for existing branch (without -b flag)
+	await execGitWorktreeAdd(dir, [branch]);
 	console.log(`Created worktree at ${dir}`);
 
 	await copyUntrackedFiles(baseDir, dir);
