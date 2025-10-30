@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { branch } from "./branch.js";
 import { completion, setupCompletion } from "./completion.js";
@@ -11,11 +14,17 @@ import { openInEditor } from "./utils/editor.js";
 import { extractErrorMessage } from "./utils/extractErrorMessage.js";
 import { installPruneHook } from "./utils/git/installPruneHook.js";
 
+// Read version from package.json
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJsonPath = join(__dirname, "..", "package.json");
+const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+
 const program = new Command();
 program
 	.name("twig")
-	.description("Git worktree manager with optional Dev Container integration")
-	.version("1.0.0");
+	.description(packageJson.description)
+	.version(packageJson.version);
 
 program
 	.command("branch")
