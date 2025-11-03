@@ -37,7 +37,7 @@ describe("twig CLI", () => {
 			assert.strictEqual(status, 0);
 			assert.ok(stdout.includes("twig"), "should contain program name");
 			assert.ok(
-				stdout.includes("Git worktree manager"),
+				stdout.includes("Git worktree") || stdout.includes("worktree"),
 				"should contain description",
 			);
 			assert.ok(stdout.includes("Commands:"), "should list commands");

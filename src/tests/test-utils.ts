@@ -1,4 +1,8 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { mock } from "node:test";
+import { execa } from "execa";
 
 export interface MockExecaResult {
 	stdout: string;
@@ -91,5 +95,50 @@ export function mockFileStats(): MockFsStats {
 	return {
 		isDirectory: () => false,
 		isFile: () => true,
+	};
+}
+
+/**
+ * Sets up a temporary git repository for testing.
+ * Changes the current working directory to the temp repo and restores it in cleanup.
+ * @returns An object with the temp repo path and a cleanup function
+ */
+export async function setupTempGitRepo(): Promise<{
+	repoPath: string;
+	cleanup: () => Promise<void>;
+}> {
+	const originalCwd = process.cwd();
+	const repoPath = await mkdtemp(join(tmpdir(), "twig-test-"));
+
+	// Initialize git repository
+	await execa("git", ["init"], { cwd: repoPath });
+
+	// Configure git to avoid interactive prompts during tests
+	await execa("git", ["config", "user.name", "Test User"], { cwd: repoPath });
+	await execa("git", ["config", "user.email", "test@example.com"], {
+		cwd: repoPath,
+	});
+
+	// Create an initial commit so we have a branch to work with
+	await execa("git", ["commit", "--allow-empty", "-m", "Initial commit"], {
+		cwd: repoPath,
+	});
+
+	// Change to the temp directory
+	process.chdir(repoPath);
+
+	return {
+		repoPath,
+		cleanup: async () => {
+			// Restore original working directory
+			process.chdir(originalCwd);
+
+			// Clean up temp directory
+			try {
+				await rm(repoPath, { recursive: true, force: true });
+			} catch {
+				// Ignore cleanup errors
+			}
+		},
 	};
 }

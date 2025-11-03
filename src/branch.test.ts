@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { execa } from "execa";
 import { branch } from "./branch.js";
+import { setupTempGitRepo } from "./tests/test-utils.js";
 import { branchExists } from "./utils/git/branchExists.js";
 import { parseWorktrees } from "./utils/git/parseWorktrees.js";
 import { resolveWorktreePath } from "./utils/git/resolveWorktreePath.js";
@@ -13,6 +14,9 @@ import {
 
 describe("branch command", () => {
 	it("should create worktree for existing branch without worktree", async () => {
+		// Set up a temporary git repository for this test
+		const { cleanup } = await setupTempGitRepo();
+
 		// Create a unique test branch name
 		const testBranch = `test-existing-branch-${Date.now()}-${Math.random()
 			.toString(36)
@@ -106,6 +110,9 @@ describe("branch command", () => {
 			} catch {
 				// Ignore cleanup errors
 			}
+
+			// Clean up the temporary repository
+			await cleanup();
 		}
 	});
 });

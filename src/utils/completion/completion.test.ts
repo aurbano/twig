@@ -78,27 +78,24 @@ describe("completion module", () => {
 			const worktreesAsync = await parseWorktrees();
 			const asyncBranches = worktreesAsync
 				.filter((wt) => wt.branch !== undefined)
-				.map((wt) => wt.branch as string);
+				.map((wt) => wt.branch as string)
+				.sort();
 
 			// Get branches the same way completion does for delete command (sync)
+			// Small delay to ensure any in-flight git operations complete
+			await new Promise((resolve) => setTimeout(resolve, 50));
 			const worktreesSync = parseWorktreesSync();
 			const syncBranches = worktreesSync
 				.filter((wt) => wt.branch !== undefined)
-				.map((wt) => wt.branch as string);
+				.map((wt) => wt.branch as string)
+				.sort();
 
-			// These should match!
-			assert.strictEqual(
-				syncBranches.length,
-				asyncBranches.length,
-				`Sync version returned ${syncBranches.length} branches but async version shows ${asyncBranches.length}`,
+			// These should match! Compare sorted arrays to avoid ordering issues
+			assert.deepStrictEqual(
+				syncBranches,
+				asyncBranches,
+				`Sync version returned ${syncBranches.length} branches [${syncBranches.join(", ")}] but async version shows ${asyncBranches.length} branches [${asyncBranches.join(", ")}]`,
 			);
-
-			for (const branch of asyncBranches) {
-				assert.ok(
-					syncBranches.includes(branch),
-					`Branch "${branch}" from async version not found in sync version`,
-				);
-			}
 		});
 
 		it("should extract command name from completion line correctly", () => {
