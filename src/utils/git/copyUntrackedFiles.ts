@@ -55,10 +55,13 @@ export async function copyUntrackedFiles(
 					try {
 						const stats = await fs.stat(srcPath);
 						if (stats.isDirectory()) {
-							// Copy entire directory recursively
+							// Copy entire directory recursively, preserving symlinks
+							// By default, fs.cp preserves symlinks when recursive: true
+							// but we explicitly don't dereference them
 							await fs.cp(srcPath, destPath, {
 								recursive: true,
 								force: false,
+								dereference: false, // Preserve symlinks, don't dereference
 							});
 						}
 					} catch {
@@ -87,8 +90,35 @@ export async function copyUntrackedFiles(
 				try {
 					// Ensure parent directory exists
 					await mkdir(path.dirname(destPath));
-					// Copy the file
-					await fs.copyFile(srcPath, destPath);
+
+					// Check if the source is a symlink and preserve it
+					let isSymlink = false;
+					try {
+						const linkStats = await fs.lstat(srcPath);
+						isSymlink = linkStats.isSymbolicLink();
+					} catch {
+						// If we can't stat it, proceed with regular copy
+					}
+
+					if (isSymlink) {
+						// Read the symlink target and preserve it as-is
+						// Since we're copying to the same relative structure,
+						// relative symlinks will still work correctly
+						const linkTarget = await fs.readlink(srcPath);
+						try {
+							await fs.symlink(linkTarget, destPath);
+						} catch (symlinkErr) {
+							// If symlink already exists, that's okay - it might have been
+							// created by a directory copy operation
+							if ((symlinkErr as NodeJS.ErrnoException).code !== "EEXIST") {
+								throw symlinkErr;
+							}
+						}
+					} else {
+						// Copy the file (for regular files, copyFile is fine)
+						await fs.copyFile(srcPath, destPath);
+					}
+
 					completed++;
 					individualFilesCopied++;
 
