@@ -1,3 +1,5 @@
+import { detectDependencies } from "../dependencies/detectDependencies.js";
+import { runInstall } from "../dependencies/runInstall.js";
 import { fileExists } from "../system/fs-operations.js";
 import {
 	execGit,
@@ -19,7 +21,13 @@ import { repoRoot } from "./repoRoot.js";
  */
 export async function createWorktree(
 	branch: string,
-	opts: { base?: string; dir?: string; yes?: boolean; offline?: boolean },
+	opts: {
+		base?: string;
+		dir?: string;
+		yes?: boolean;
+		offline?: boolean;
+		noInstall?: boolean;
+	},
 ) {
 	validateBranchName(branch);
 
@@ -62,6 +70,15 @@ export async function createWorktree(
 	console.log(`Created worktree at ${dir}`);
 
 	await copyUntrackedFiles(baseDir, dir);
+
+	// Detect and offer to install dependencies
+	const depManager = await detectDependencies(dir);
+	if (depManager) {
+		await runInstall(dir, depManager, {
+			...(opts.yes !== undefined && { yes: opts.yes }),
+			...(opts.noInstall !== undefined && { noInstall: opts.noInstall }),
+		});
+	}
 
 	return dir;
 }

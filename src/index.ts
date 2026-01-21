@@ -40,6 +40,7 @@ program
 	)
 	.option("--in-container", "bring up devcontainer then open")
 	.option("--offline", "skip fetching from origin (use local branches only)")
+	.option("--no-install", "skip dependency installation")
 	.option("-y, --yes", "assume yes to prompts")
 	.action(async (target, opts) => {
 		await installPruneHook();

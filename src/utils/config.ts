@@ -25,6 +25,16 @@ export interface CopyStrategyConfig {
 }
 
 /**
+ * Dependency installation configuration
+ */
+export interface DependencyConfig {
+	/** Whether to auto-install dependencies (default: true, will prompt) */
+	autoInstall?: boolean;
+	/** Custom install command to override auto-detection */
+	command?: string[];
+}
+
+/**
  * Default directories to skip when copying untracked files.
  * These are typically large dependency/build directories that should be
  * regenerated in the new worktree rather than copied.
@@ -55,6 +65,7 @@ export const DEFAULT_SKIP_DIRECTORIES = [
 export interface TwigConfig {
 	editor?: EditorConfig;
 	copyStrategy?: CopyStrategyConfig;
+	dependencies?: DependencyConfig;
 }
 
 /**
@@ -345,5 +356,96 @@ export async function loadCopyStrategyConfig(
 	return {
 		skip: DEFAULT_SKIP_DIRECTORIES,
 		timeout: 300000,
+	};
+}
+
+/**
+ * Validate and normalize dependency config
+ */
+function validateDependencyConfig(
+	config: unknown,
+	source: string,
+): DependencyConfig | null {
+	if (typeof config !== "object" || config === null) {
+		console.warn(`Invalid dependencies config in ${source}: must be an object`);
+		return null;
+	}
+
+	const obj = config as Record<string, unknown>;
+	const result: DependencyConfig = {};
+
+	if (obj.autoInstall !== undefined) {
+		if (typeof obj.autoInstall !== "boolean") {
+			console.warn(
+				`Invalid dependencies.autoInstall in ${source}: must be a boolean`,
+			);
+			return null;
+		}
+		result.autoInstall = obj.autoInstall;
+	}
+
+	if (obj.command !== undefined) {
+		if (!Array.isArray(obj.command)) {
+			console.warn(
+				`Invalid dependencies.command in ${source}: must be an array`,
+			);
+			return null;
+		}
+		if (!obj.command.every((item) => typeof item === "string")) {
+			console.warn(
+				`Invalid dependencies.command in ${source}: all items must be strings`,
+			);
+			return null;
+		}
+		result.command = obj.command as string[];
+	}
+
+	return result;
+}
+
+/**
+ * Load dependency configuration with precedence:
+ * 1. Per-project .twig file
+ * 2. Global config file
+ * 3. Default (autoInstall: true)
+ */
+export async function loadDependencyConfig(
+	targetDir: string,
+): Promise<DependencyConfig> {
+	// 1. Check for per-project config
+	const projectConfigPath = join(targetDir, ".twig");
+	const projectConfig = loadConfigFile(projectConfigPath);
+	if (projectConfig?.dependencies) {
+		const validated = validateDependencyConfig(
+			projectConfig.dependencies,
+			projectConfigPath,
+		);
+		if (validated) {
+			return {
+				autoInstall: validated.autoInstall ?? true,
+				...(validated.command && { command: validated.command }),
+			};
+		}
+	}
+
+	// 2. Check for global config
+	const globalConfigPath = getGlobalConfigPath();
+	const globalConfig = loadConfigFile(globalConfigPath);
+	if (globalConfig?.dependencies) {
+		const validated = validateDependencyConfig(
+			globalConfig.dependencies,
+			globalConfigPath,
+		);
+		if (validated) {
+			return {
+				autoInstall: validated.autoInstall ?? true,
+				...(validated.command && { command: validated.command }),
+			};
+		}
+	}
+
+	// 3. Return defaults
+	return {
+		autoInstall: true,
 	};
 }
