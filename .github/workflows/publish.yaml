@@ -1,12 +1,16 @@
 name: Publish Package
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 1.5.0)"
+        required: true
+        type: string
 
 permissions:
   id-token: write # Required for OIDC for npm publishing
-  contents: read
+  contents: write # Required for commits, tags, and releases
 
 jobs:
   publish:
@@ -17,7 +21,24 @@ jobs:
         with:
           node-version: "22.x"
           registry-url: "https://registry.npmjs.org"
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Update version, commit, and tag
+        run: npm version ${{ inputs.version }} -m "Release v%s"
+
+      - name: Push changes and tag
+        run: git push --follow-tags
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${{ inputs.version }}" --generate-notes
+
       - name: Update npm
         run: npm install -g npm@latest
+
       - run: npm ci
+
       - run: npm publish --provenance
