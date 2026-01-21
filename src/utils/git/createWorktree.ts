@@ -1,5 +1,9 @@
 import { fileExists } from "../system/fs-operations.js";
-import { execGitShowRef, execGitWorktreeAdd } from "../system/git-commands.js";
+import {
+	execGit,
+	execGitShowRef,
+	execGitWorktreeAdd,
+} from "../system/git-commands.js";
 import { validateBranchName } from "../validation.js";
 import { copyUntrackedFiles } from "./copyUntrackedFiles.js";
 import { defaultDir } from "./defaultDir.js";
@@ -15,12 +19,27 @@ import { repoRoot } from "./repoRoot.js";
  */
 export async function createWorktree(
 	branch: string,
-	opts: { base?: string; dir?: string; yes?: boolean },
+	opts: { base?: string; dir?: string; yes?: boolean; offline?: boolean },
 ) {
 	validateBranchName(branch);
 
 	const base = opts.base ?? (await detectDefaultBranch());
-	const baseRef = await ensureBaseUpToDate(base);
+
+	let baseRef: string;
+	if (opts.offline) {
+		// In offline mode, use the local branch directly without fetching
+		const localExists = await execGitShowRef(`refs/heads/${base}`);
+		if (!localExists) {
+			throw new Error(
+				`Branch '${base}' does not exist locally. Remove --offline flag to fetch from origin.`,
+			);
+		}
+		// Get the commit SHA of the local branch
+		baseRef = await execGit(["rev-parse", base]);
+		console.log(`Using local branch ${base} (offline mode)`);
+	} else {
+		baseRef = await ensureBaseUpToDate(base);
+	}
 
 	// Capture the base branch's working directory path for copying untracked files
 	const baseDir = await repoRoot();

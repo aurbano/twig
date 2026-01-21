@@ -12,7 +12,7 @@ import { resolveWorktreePath } from "./utils/git/resolveWorktreePath.js";
  */
 export async function branch(
 	target: string,
-	opts: { base?: string; dir?: string; yes?: boolean } = {},
+	opts: { base?: string; dir?: string; yes?: boolean; offline?: boolean } = {},
 ) {
 	// Try to resolve existing worktree
 	const existing = await resolveWorktreePath(target);

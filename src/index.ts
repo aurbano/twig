@@ -39,6 +39,7 @@ program
 		"target directory for new worktrees (default ../<repo>-<branch>)",
 	)
 	.option("--in-container", "bring up devcontainer then open")
+	.option("--offline", "skip fetching from origin (use local branches only)")
 	.option("-y, --yes", "assume yes to prompts")
 	.action(async (target, opts) => {
 		await installPruneHook();

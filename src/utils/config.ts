@@ -13,10 +13,48 @@ export type EditorConfig =
 	  };
 
 /**
+ * Copy strategy configuration for untracked files
+ */
+export interface CopyStrategyConfig {
+	/** Directories/files to skip entirely (glob patterns supported) */
+	skip?: string[];
+	/** Files/dirs to symlink instead of copy */
+	symlink?: string[];
+	/** Copy timeout in milliseconds (default: 300000 = 5 minutes) */
+	timeout?: number;
+}
+
+/**
+ * Default directories to skip when copying untracked files.
+ * These are typically large dependency/build directories that should be
+ * regenerated in the new worktree rather than copied.
+ */
+export const DEFAULT_SKIP_DIRECTORIES = [
+	"node_modules",
+	".next",
+	".nuxt",
+	"dist",
+	"build",
+	".turbo",
+	".cache",
+	".parcel-cache",
+	".vite",
+	"coverage",
+	".nyc_output",
+	"__pycache__",
+	".pytest_cache",
+	"venv",
+	".venv",
+	"target", // Rust/Java
+	"vendor", // Go/PHP
+];
+
+/**
  * Full configuration structure
  */
 export interface TwigConfig {
 	editor?: EditorConfig;
+	copyStrategy?: CopyStrategyConfig;
 }
 
 /**
@@ -193,4 +231,119 @@ export async function loadEditorConfig(
  */
 export function getConfigPath(): string {
 	return getGlobalConfigPath();
+}
+
+/**
+ * Validate and normalize copy strategy config
+ */
+function validateCopyStrategyConfig(
+	config: unknown,
+	source: string,
+): CopyStrategyConfig | null {
+	if (typeof config !== "object" || config === null) {
+		console.warn(`Invalid copyStrategy config in ${source}: must be an object`);
+		return null;
+	}
+
+	const obj = config as Record<string, unknown>;
+	const result: CopyStrategyConfig = {};
+
+	if (obj.skip !== undefined) {
+		if (!Array.isArray(obj.skip)) {
+			console.warn(`Invalid copyStrategy.skip in ${source}: must be an array`);
+			return null;
+		}
+		if (!obj.skip.every((item) => typeof item === "string")) {
+			console.warn(
+				`Invalid copyStrategy.skip in ${source}: all items must be strings`,
+			);
+			return null;
+		}
+		result.skip = obj.skip as string[];
+	}
+
+	if (obj.symlink !== undefined) {
+		if (!Array.isArray(obj.symlink)) {
+			console.warn(
+				`Invalid copyStrategy.symlink in ${source}: must be an array`,
+			);
+			return null;
+		}
+		if (!obj.symlink.every((item) => typeof item === "string")) {
+			console.warn(
+				`Invalid copyStrategy.symlink in ${source}: all items must be strings`,
+			);
+			return null;
+		}
+		result.symlink = obj.symlink as string[];
+	}
+
+	if (obj.timeout !== undefined) {
+		if (typeof obj.timeout !== "number" || obj.timeout <= 0) {
+			console.warn(
+				`Invalid copyStrategy.timeout in ${source}: must be a positive number`,
+			);
+			return null;
+		}
+		result.timeout = obj.timeout;
+	}
+
+	return result;
+}
+
+/**
+ * Load copy strategy configuration with precedence:
+ * 1. Per-project .twig file
+ * 2. Global config file
+ * 3. Default skip list
+ */
+export async function loadCopyStrategyConfig(
+	targetDir: string,
+): Promise<CopyStrategyConfig> {
+	// 1. Check for per-project config
+	const projectConfigPath = join(targetDir, ".twig");
+	const projectConfig = loadConfigFile(projectConfigPath);
+	if (projectConfig?.copyStrategy) {
+		const validated = validateCopyStrategyConfig(
+			projectConfig.copyStrategy,
+			projectConfigPath,
+		);
+		if (validated) {
+			// Merge with defaults if skip is not explicitly set
+			const result: CopyStrategyConfig = {
+				skip: validated.skip ?? DEFAULT_SKIP_DIRECTORIES,
+				timeout: validated.timeout ?? 300000,
+			};
+			if (validated.symlink) {
+				result.symlink = validated.symlink;
+			}
+			return result;
+		}
+	}
+
+	// 2. Check for global config
+	const globalConfigPath = getGlobalConfigPath();
+	const globalConfig = loadConfigFile(globalConfigPath);
+	if (globalConfig?.copyStrategy) {
+		const validated = validateCopyStrategyConfig(
+			globalConfig.copyStrategy,
+			globalConfigPath,
+		);
+		if (validated) {
+			const result: CopyStrategyConfig = {
+				skip: validated.skip ?? DEFAULT_SKIP_DIRECTORIES,
+				timeout: validated.timeout ?? 300000,
+			};
+			if (validated.symlink) {
+				result.symlink = validated.symlink;
+			}
+			return result;
+		}
+	}
+
+	// 3. Return defaults
+	return {
+		skip: DEFAULT_SKIP_DIRECTORIES,
+		timeout: 300000,
+	};
 }
