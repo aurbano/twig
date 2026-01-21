@@ -59,6 +59,7 @@ program
 program
 	.command("delete")
 	.alias("d")
+	.alias("rm")
 	.argument("<branchOrPath>")
 	.option("--keep-branch", "do not delete the git branch")
 	.option("-y, --yes", "assume yes to prompts")
