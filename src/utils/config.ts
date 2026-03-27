@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { homedir, platform } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 /**
@@ -64,31 +64,28 @@ export const DEFAULT_SKIP_DIRECTORIES = [
  */
 export interface TwigConfig {
 	editor?: EditorConfig;
+	openEditor?: boolean;
+	cdAfterBranch?: boolean;
 	copyStrategy?: CopyStrategyConfig;
 	dependencies?: DependencyConfig;
 }
 
-/**
- * Get the global config directory path based on platform
- */
-function getGlobalConfigPath(): string {
-	const isWindows = platform() === "win32";
+// ── Path helpers ──
 
-	if (isWindows) {
-		// Use APPDATA on Windows, fall back to home directory
-		const appData =
-			process.env.APPDATA || join(homedir(), "AppData", "Roaming");
-		return join(appData, "twig", "config.json");
-	}
-
-	// Use XDG_CONFIG_HOME on Unix-like systems, fall back to ~/.config
-	const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-	return join(xdgConfig, "twig", "config.json");
+export function getGlobalConfigDir(): string {
+	return join(homedir(), ".twig");
 }
 
-/**
- * Load and parse a config file
- */
+function getGlobalConfigPath(): string {
+	return join(getGlobalConfigDir(), "config");
+}
+
+export function getConfigPath(): string {
+	return getGlobalConfigPath();
+}
+
+// ── Config file I/O ──
+
 function loadConfigFile(path: string): TwigConfig | null {
 	if (!existsSync(path)) {
 		return null;
@@ -98,7 +95,6 @@ function loadConfigFile(path: string): TwigConfig | null {
 		const content = readFileSync(path, "utf-8");
 		const config = JSON.parse(content);
 
-		// Validate basic structure
 		if (typeof config !== "object" || config === null) {
 			console.warn(`Invalid config file at ${path}: must be a JSON object`);
 			return null;
@@ -117,9 +113,49 @@ function loadConfigFile(path: string): TwigConfig | null {
 	}
 }
 
-/**
- * Validate and normalize editor config
- */
+export function loadGlobalConfig(): TwigConfig {
+	return loadConfigFile(getGlobalConfigPath()) ?? {};
+}
+
+export function saveGlobalConfig(config: TwigConfig): void {
+	const dir = getGlobalConfigDir();
+	mkdirSync(dir, { recursive: true });
+	writeFileSync(
+		getGlobalConfigPath(),
+		`${JSON.stringify(config, null, 2)}\n`,
+		"utf-8",
+	);
+}
+
+// ── Generic config field loader (project → global → null) ──
+
+type Validator<T> = (value: unknown, source: string) => T | null;
+
+function loadConfigField<T>(
+	targetDir: string,
+	field: keyof TwigConfig,
+	validate: Validator<T>,
+): T | null {
+	const projectConfigPath = join(targetDir, ".twig");
+	const projectConfig = loadConfigFile(projectConfigPath);
+	const projectValue = projectConfig?.[field];
+	if (projectValue !== undefined) {
+		const validated = validate(projectValue, projectConfigPath);
+		if (validated !== null) return validated;
+	}
+
+	const globalConfig = loadConfigFile(getGlobalConfigPath());
+	const globalValue = globalConfig?.[field];
+	if (globalValue !== undefined) {
+		const validated = validate(globalValue, getGlobalConfigPath());
+		if (validated !== null) return validated;
+	}
+
+	return null;
+}
+
+// ── Validators ──
+
 function validateEditorConfig(
 	config: unknown,
 	source: string,
@@ -152,17 +188,10 @@ function validateEditorConfig(
 			return null;
 		}
 
-		// Only include args if it's defined to satisfy exactOptionalPropertyTypes
 		if (obj.args) {
-			return {
-				command: obj.command,
-				args: obj.args as string[],
-			};
+			return { command: obj.command, args: obj.args as string[] };
 		}
-
-		return {
-			command: obj.command,
-		};
+		return { command: obj.command };
 	}
 
 	console.warn(
@@ -171,82 +200,16 @@ function validateEditorConfig(
 	return null;
 }
 
-/**
- * Detect smart defaults based on project markers
- */
-export function detectSmartDefault(targetDir: string): string | null {
-	// Check for common editor-specific folders
-	if (existsSync(join(targetDir, ".cursor"))) {
-		return "cursor";
-	}
-
-	if (existsSync(join(targetDir, ".vscode"))) {
-		return "code";
-	}
-
-	if (existsSync(join(targetDir, ".claude"))) {
-		return "claude";
-	}
-
-	return null;
-}
-
-/**
- * Load editor configuration with precedence:
- * 1. Per-project .twig file
- * 2. Global config file
- * 3. Smart defaults from project markers
- * 4. null (use fallback behavior)
- */
-export async function loadEditorConfig(
-	targetDir: string,
-): Promise<EditorConfig | null> {
-	// 1. Check for per-project config
-	const projectConfigPath = join(targetDir, ".twig");
-	const projectConfig = loadConfigFile(projectConfigPath);
-	if (projectConfig?.editor) {
-		const validated = validateEditorConfig(
-			projectConfig.editor,
-			projectConfigPath,
-		);
-		if (validated) {
-			return validated;
+function booleanValidator(field: string): Validator<boolean> {
+	return (value: unknown, source: string): boolean | null => {
+		if (typeof value !== "boolean") {
+			console.warn(`Invalid ${field} in ${source}: must be a boolean`);
+			return null;
 		}
-	}
-
-	// 2. Check for global config
-	const globalConfigPath = getGlobalConfigPath();
-	const globalConfig = loadConfigFile(globalConfigPath);
-	if (globalConfig?.editor) {
-		const validated = validateEditorConfig(
-			globalConfig.editor,
-			globalConfigPath,
-		);
-		if (validated) {
-			return validated;
-		}
-	}
-
-	// 3. Try smart defaults
-	const smartDefault = detectSmartDefault(targetDir);
-	if (smartDefault) {
-		return smartDefault;
-	}
-
-	// 4. No config found, return null for fallback behavior
-	return null;
+		return value;
+	};
 }
 
-/**
- * Get the global config path for user reference
- */
-export function getConfigPath(): string {
-	return getGlobalConfigPath();
-}
-
-/**
- * Validate and normalize copy strategy config
- */
 function validateCopyStrategyConfig(
 	config: unknown,
 	source: string,
@@ -302,66 +265,6 @@ function validateCopyStrategyConfig(
 	return result;
 }
 
-/**
- * Load copy strategy configuration with precedence:
- * 1. Per-project .twig file
- * 2. Global config file
- * 3. Default skip list
- */
-export async function loadCopyStrategyConfig(
-	targetDir: string,
-): Promise<CopyStrategyConfig> {
-	// 1. Check for per-project config
-	const projectConfigPath = join(targetDir, ".twig");
-	const projectConfig = loadConfigFile(projectConfigPath);
-	if (projectConfig?.copyStrategy) {
-		const validated = validateCopyStrategyConfig(
-			projectConfig.copyStrategy,
-			projectConfigPath,
-		);
-		if (validated) {
-			// Merge with defaults if skip is not explicitly set
-			const result: CopyStrategyConfig = {
-				skip: validated.skip ?? DEFAULT_SKIP_DIRECTORIES,
-				timeout: validated.timeout ?? 300000,
-			};
-			if (validated.symlink) {
-				result.symlink = validated.symlink;
-			}
-			return result;
-		}
-	}
-
-	// 2. Check for global config
-	const globalConfigPath = getGlobalConfigPath();
-	const globalConfig = loadConfigFile(globalConfigPath);
-	if (globalConfig?.copyStrategy) {
-		const validated = validateCopyStrategyConfig(
-			globalConfig.copyStrategy,
-			globalConfigPath,
-		);
-		if (validated) {
-			const result: CopyStrategyConfig = {
-				skip: validated.skip ?? DEFAULT_SKIP_DIRECTORIES,
-				timeout: validated.timeout ?? 300000,
-			};
-			if (validated.symlink) {
-				result.symlink = validated.symlink;
-			}
-			return result;
-		}
-	}
-
-	// 3. Return defaults
-	return {
-		skip: DEFAULT_SKIP_DIRECTORIES,
-		timeout: 300000,
-	};
-}
-
-/**
- * Validate and normalize dependency config
- */
 function validateDependencyConfig(
 	config: unknown,
 	source: string,
@@ -403,49 +306,154 @@ function validateDependencyConfig(
 	return result;
 }
 
-/**
- * Load dependency configuration with precedence:
- * 1. Per-project .twig file
- * 2. Global config file
- * 3. Default (autoInstall: true)
- */
+// ── Public config loaders ──
+
+export function detectSmartDefault(targetDir: string): string | null {
+	if (existsSync(join(targetDir, ".cursor"))) return "cursor";
+	if (existsSync(join(targetDir, ".vscode"))) return "code";
+	if (existsSync(join(targetDir, ".claude"))) return "claude";
+	return null;
+}
+
+export async function loadEditorConfig(
+	targetDir: string,
+): Promise<EditorConfig | null> {
+	const config = loadConfigField(targetDir, "editor", validateEditorConfig);
+	if (config) return config;
+	return detectSmartDefault(targetDir);
+}
+
+export async function loadOpenEditorConfig(
+	targetDir: string,
+): Promise<boolean> {
+	return (
+		loadConfigField(targetDir, "openEditor", booleanValidator("openEditor")) ??
+		true
+	);
+}
+
+export async function loadCdAfterBranchConfig(
+	targetDir: string,
+): Promise<boolean> {
+	return (
+		loadConfigField(
+			targetDir,
+			"cdAfterBranch",
+			booleanValidator("cdAfterBranch"),
+		) ?? true
+	);
+}
+
+export async function loadCopyStrategyConfig(
+	targetDir: string,
+): Promise<CopyStrategyConfig> {
+	const validated = loadConfigField(
+		targetDir,
+		"copyStrategy",
+		validateCopyStrategyConfig,
+	);
+	if (validated) {
+		return {
+			skip: validated.skip ?? DEFAULT_SKIP_DIRECTORIES,
+			timeout: validated.timeout ?? 300000,
+			...(validated.symlink && { symlink: validated.symlink }),
+		};
+	}
+	return { skip: DEFAULT_SKIP_DIRECTORIES, timeout: 300000 };
+}
+
 export async function loadDependencyConfig(
 	targetDir: string,
 ): Promise<DependencyConfig> {
-	// 1. Check for per-project config
-	const projectConfigPath = join(targetDir, ".twig");
-	const projectConfig = loadConfigFile(projectConfigPath);
-	if (projectConfig?.dependencies) {
-		const validated = validateDependencyConfig(
-			projectConfig.dependencies,
-			projectConfigPath,
-		);
-		if (validated) {
-			return {
-				autoInstall: validated.autoInstall ?? true,
-				...(validated.command && { command: validated.command }),
-			};
-		}
+	const validated = loadConfigField(
+		targetDir,
+		"dependencies",
+		validateDependencyConfig,
+	);
+	if (validated) {
+		return {
+			autoInstall: validated.autoInstall ?? true,
+			...(validated.command && { command: validated.command }),
+		};
 	}
+	return { autoInstall: true };
+}
 
-	// 2. Check for global config
-	const globalConfigPath = getGlobalConfigPath();
-	const globalConfig = loadConfigFile(globalConfigPath);
-	if (globalConfig?.dependencies) {
-		const validated = validateDependencyConfig(
-			globalConfig.dependencies,
-			globalConfigPath,
-		);
-		if (validated) {
-			return {
-				autoInstall: validated.autoInstall ?? true,
-				...(validated.command && { command: validated.command }),
-			};
-		}
-	}
+// ── Dot-notation config access for `twig config get/set` ──
+//
+// Uses an explicit allowlist of known keys to avoid dynamic property
+// traversal (which triggers prototype-pollution warnings).
 
-	// 3. Return defaults
-	return {
-		autoInstall: true,
-	};
+type ConfigGetter = (config: TwigConfig) => unknown;
+type ConfigSetter = (config: TwigConfig, value: unknown) => TwigConfig;
+
+const CONFIG_GETTERS: Record<string, ConfigGetter> = {
+	editor: (c) => c.editor,
+	"editor.command": (c) =>
+		typeof c.editor === "object" ? c.editor.command : undefined,
+	"editor.args": (c) =>
+		typeof c.editor === "object" ? c.editor.args : undefined,
+	openEditor: (c) => c.openEditor,
+	cdAfterBranch: (c) => c.cdAfterBranch,
+	copyStrategy: (c) => c.copyStrategy,
+	"copyStrategy.skip": (c) => c.copyStrategy?.skip,
+	"copyStrategy.symlink": (c) => c.copyStrategy?.symlink,
+	"copyStrategy.timeout": (c) => c.copyStrategy?.timeout,
+	dependencies: (c) => c.dependencies,
+	"dependencies.autoInstall": (c) => c.dependencies?.autoInstall,
+	"dependencies.command": (c) => c.dependencies?.command,
+};
+
+const CONFIG_SETTERS: Record<string, ConfigSetter> = {
+	editor: (c, v) => ({ ...c, editor: v as EditorConfig }),
+	"editor.command": (c, v) => {
+		const base = typeof c.editor === "object" ? c.editor : {};
+		return { ...c, editor: { ...base, command: v as string } };
+	},
+	"editor.args": (c, v) => {
+		const base = typeof c.editor === "object" ? c.editor : { command: "" };
+		return { ...c, editor: { ...base, args: v as string[] } };
+	},
+	openEditor: (c, v) => ({ ...c, openEditor: v as boolean }),
+	cdAfterBranch: (c, v) => ({ ...c, cdAfterBranch: v as boolean }),
+	copyStrategy: (c, v) => ({ ...c, copyStrategy: v as CopyStrategyConfig }),
+	"copyStrategy.skip": (c, v) => ({
+		...c,
+		copyStrategy: { ...c.copyStrategy, skip: v as string[] },
+	}),
+	"copyStrategy.symlink": (c, v) => ({
+		...c,
+		copyStrategy: { ...c.copyStrategy, symlink: v as string[] },
+	}),
+	"copyStrategy.timeout": (c, v) => ({
+		...c,
+		copyStrategy: { ...c.copyStrategy, timeout: v as number },
+	}),
+	dependencies: (c, v) => ({ ...c, dependencies: v as DependencyConfig }),
+	"dependencies.autoInstall": (c, v) => ({
+		...c,
+		dependencies: { ...c.dependencies, autoInstall: v as boolean },
+	}),
+	"dependencies.command": (c, v) => ({
+		...c,
+		dependencies: { ...c.dependencies, command: v as string[] },
+	}),
+};
+
+export const VALID_CONFIG_KEYS = Object.keys(CONFIG_GETTERS);
+
+export function getConfigValue(config: TwigConfig, key: string): unknown {
+	const getter = CONFIG_GETTERS[key];
+	if (!getter) return undefined;
+	return getter(config);
+}
+
+export function setConfigValue(
+	config: TwigConfig,
+	key: string,
+	value: unknown,
+): TwigConfig {
+	const setter = CONFIG_SETTERS[key];
+	if (!setter) return config;
+	return setter(config, value);
 }

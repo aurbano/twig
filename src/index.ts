@@ -5,14 +5,26 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { branch } from "./branch.js";
 import { completion, setupCompletion } from "./completion.js";
+import {
+	configGet,
+	configList,
+	configPath,
+	configSet,
+	configWizard,
+} from "./config-command.js";
 import { deleteWorktree } from "./delete.js";
 import { initDevcontainer } from "./init-devcontainer.js";
 import { list } from "./list.js";
 import { prune } from "./prune.js";
+import {
+	loadCdAfterBranchConfig,
+	loadOpenEditorConfig,
+} from "./utils/config.js";
 import { devcontainerUp } from "./utils/devcontainer/devcontainerUp.js";
 import { openInEditor } from "./utils/editor.js";
 import { extractErrorMessage } from "./utils/extractErrorMessage.js";
 import { installPruneHook } from "./utils/git/installPruneHook.js";
+import { writeLastDir } from "./utils/lastDir.js";
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -46,7 +58,16 @@ program
 		await installPruneHook();
 		const dir = await branch(target, opts);
 		if (opts.inContainer) await devcontainerUp(dir);
-		await openInEditor(dir);
+
+		const shouldOpenEditor = await loadOpenEditorConfig(dir);
+		if (shouldOpenEditor) {
+			await openInEditor(dir);
+		}
+
+		const shouldCd = await loadCdAfterBranchConfig(dir);
+		if (shouldCd) {
+			writeLastDir(dir);
+		}
 	});
 
 program
@@ -99,6 +120,45 @@ program
 	.option("--cleanup", "remove shell completion")
 	.action(async (opts) => {
 		await completion(opts);
+	});
+
+const configCmd = program
+	.command("config")
+	.alias("c")
+	.description("view and manage configuration")
+	.action(async () => {
+		await configWizard();
+	});
+
+configCmd
+	.command("set")
+	.description("set a config value")
+	.argument("<key>", "config key (dot notation)")
+	.argument("<value>", "config value")
+	.action(async (key: string, value: string) => {
+		await configSet(key, value);
+	});
+
+configCmd
+	.command("get")
+	.description("get a config value")
+	.argument("<key>", "config key (dot notation)")
+	.action(async (key: string) => {
+		await configGet(key);
+	});
+
+configCmd
+	.command("list")
+	.description("show all config")
+	.action(async () => {
+		await configList();
+	});
+
+configCmd
+	.command("path")
+	.description("show config file path")
+	.action(async () => {
+		await configPath();
 	});
 
 // Setup shell completion after all commands are registered

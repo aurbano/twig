@@ -47,15 +47,6 @@ export async function openInEditor(dir: string): Promise<void> {
 
 	// Handle configured editor
 	if (config) {
-		// Special case: "none" means skip editor launch
-		if (config === "none") {
-			console.log(`Editor launch skipped (configured as "none"): ${dir}`);
-			console.log(
-				`Tip: Edit ${getConfigPath()} or ${dir}/.twig to change this`,
-			);
-			return;
-		}
-
 		const { command, args } = resolveEditorCommand(config);
 
 		// Try to launch the configured editor
