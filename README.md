@@ -40,11 +40,15 @@ twig d <branch-or-path>  # short alias
 twig prune
 twig p  # short alias
 
+# Configure twig (interactive wizard)
+twig config
+twig c  # short alias
+
 # Initialize dev container configuration
 twig init-devcontainer [options]
 twig i [options]  # short alias
 
-# Enable shell completion (bash/zsh)
+# Enable shell completion and shell integration (bash/zsh)
 twig completion --setup
 ```
 
@@ -70,18 +74,28 @@ twig completion --setup
 - `--postcreate <cmd>` - Command to run after container creation
 - `--mount-node-modules` - Add node_modules volume mount
 
+**`config`**
+- *(no subcommand)* - Interactive configuration wizard
+- `set <key> <value>` - Set a config value (supports dot notation, e.g. `editor.command`)
+- `get <key>` - Get a config value
+- `list` - Show all config as JSON
+- `path` - Show config file path
+
 **`completion`**
-- `--setup` - Install shell completion (bash/zsh)
-- `--cleanup` - Remove shell completion
+- `--setup` - Install shell completion and shell integration (bash/zsh)
+- `--cleanup` - Remove shell completion and shell integration
 
-## Shell Completion
+## Shell Completion & Integration
 
-Tab completion makes using `twig` much faster by auto-completing commands and git branches.
+`twig completion --setup` installs two things:
+
+1. **Tab completion** — auto-completes commands, git branches, and config subcommands
+2. **Shell integration** — a `twig()` shell function that automatically `cd`s into the new worktree after `twig branch`
 
 ### Installation
 
 ```bash
-# Install shell completion (works for bash and zsh)
+# Install shell completion and integration (works for bash and zsh)
 twig completion --setup
 
 # Then restart your terminal or source your shell config:
@@ -89,35 +103,60 @@ source ~/.bashrc  # for bash
 source ~/.zshrc   # for zsh
 ```
 
-To remove completion:
+To remove both:
 ```bash
 twig completion --cleanup
 ```
 
 ### What Gets Completed
 
-- **Commands**: `branch`, `list`, `delete`, `prune`, `init-devcontainer` (and all their aliases: `b`, `ls`, `d`, `p`, `i`)
+- **Commands**: `branch`, `list`, `delete`, `prune`, `config`, `init-devcontainer` (and all aliases)
 - **Git branches**: When using `twig branch <TAB>`, all your local git branches will be suggested
 - **Worktree branches**: When using `twig delete <TAB>`, only branches that have active worktrees will be suggested
+- **Config subcommands**: When using `twig config <TAB>`, subcommands like `set`, `get`, `list`, `path` will be suggested
 
 ## Configuration
 
-`twig` allows you to configure which editor to open when switching to a worktree. While the shell has an `$EDITOR` variable, most developers set it to `vim` for terminal use, even if they prefer Cursor, VS Code, or Claude for their main development.
+The easiest way to configure twig is with the interactive wizard:
+
+```bash
+twig config
+```
+
+You can also use git-style get/set commands:
+
+```bash
+twig config set editor cursor
+twig config set openEditor false
+twig config set cdAfterBranch true
+twig config get editor
+twig config list
+twig config path
+```
 
 ### Config File Locations
 
 `twig` looks for configuration in the following order (first match wins):
 
 1. **Per-project**: `.twig` file in the repository root
-2. **Global**:
-   - `~/.config/twig/config.json` (Linux/macOS)
-   - `%APPDATA%\twig\config.json` (Windows)
+2. **Global**: `~/.twig/config`
 3. **Smart defaults**: Auto-detected based on project markers (see below)
 4. **Fallback**: Tries `cursor`, then `code` commands
 
-### Config Format
+### Settings
 
-You can use either a simple string format or a structured format for more control:
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `editor` | string or object | auto-detect | Editor to open (e.g. `"cursor"`, `"code"`, `"vim"`) |
+| `openEditor` | boolean | `true` | Whether to open an editor after creating a branch |
+| `cdAfterBranch` | boolean | `true` | Whether to cd into the worktree after branching (requires shell integration) |
+| `copyStrategy.skip` | string[] | *(common build dirs)* | Directories to skip when copying untracked files |
+| `copyStrategy.symlink` | string[] | — | Directories to symlink instead of copy |
+| `copyStrategy.timeout` | number | `300000` | Copy timeout in milliseconds |
+| `dependencies.autoInstall` | boolean | `true` | Whether to auto-install dependencies in new worktrees |
+| `dependencies.command` | string[] | auto-detect | Custom install command |
+
+### Editor Configuration
 
 **Simple format** (most common):
 ```json
@@ -130,24 +169,13 @@ You can use either a simple string format or a structured format for more contro
 ```json
 {
   "editor": {
-    "command": "cursor",
-    "args": ["--wait", "."]
+    "command": "code",
+    "args": ["--new-window", "--goto", "."]
   }
 }
 ```
 
-### Supported Editor Shortcuts
-
-Common editor shortcuts are recognized and will use friendly names in output:
-
-- `cursor` - Cursor AI editor
-- `code` - Visual Studio Code
-- `claude` - Claude.ai editor
-- `vim` - Vim
-- `nvim` - Neovim
-- `emacs` - Emacs
-- `nano` - Nano
-- Custom commands and full paths are also supported
+Recognized editor shortcuts: `cursor`, `code`, `claude`, `vim`, `nvim`, `emacs`, `nano`. Custom commands and full paths are also supported.
 
 ### Smart Defaults
 
@@ -157,38 +185,13 @@ If no configuration file is found, `twig` will try to detect your preferred edit
 - `.vscode/` folder → Opens with VS Code
 - `.claude/` folder → Opens with Claude
 
-This means projects will automatically open in the right editor without any configuration in most cases.
-
 ### Configuration Examples
 
-**Skip editor launch entirely** (useful if you prefer to open editors manually):
+**Skip editor launch** (useful for CLI/agent workflows):
 ```json
 {
-  "editor": "none"
-}
-```
-
-**Use Vim** (great for quick edits):
-```json
-{
-  "editor": "vim"
-}
-```
-
-**Use custom editor with specific arguments**:
-```json
-{
-  "editor": {
-    "command": "code",
-    "args": ["--new-window", "--goto", "."]
-  }
-}
-```
-
-**Use custom editor path**:
-```json
-{
-  "editor": "/usr/local/bin/my-editor"
+  "openEditor": false,
+  "cdAfterBranch": true
 }
 ```
 
